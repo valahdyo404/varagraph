@@ -9,11 +9,15 @@ export type DiagramNodeStyle = {
 }
 
 export type DiagramEdgeArrow = "forward" | "reverse" | "both" | "none"
+export type DiagramEdgeType = "straight" | "default" | "step" | "smoothstep"
+
+export type LaneIcon = "rocket" | "clipboard" | "settings" | "alert" | "flag" | "none"
 
 export type Swimlane = {
   id: LaneId
   title: string
   color: string
+  icon?: LaneIcon
   x: number
   width: number
 }
@@ -46,7 +50,7 @@ export type DiagramEdge = {
   target: string
   sourceHandle?: string
   targetHandle?: string
-  type: "smoothstep"
+  type: DiagramEdgeType
   animated?: boolean
   label?: string
   data?: DiagramEdgeData

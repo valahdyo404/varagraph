@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { DiagramEdgeArrow, DiagramNodeStyle, DiagramNodeVariant, GraphModel, Swimlane } from "../types/graph"
+import type { DiagramEdgeArrow, DiagramEdgeType, DiagramNodeStyle, DiagramNodeVariant, GraphModel, LaneIcon, Swimlane } from "../types/graph"
 import type { CanvasTool } from "../components/toolbar/CanvasToolbar"
 import { autoLayoutGraph, laneColors, laneIdFromNodeCenter, nodeGapY, nodeStartY, nodeXForLane, normalizeLanes } from "../lib/graph/autoLayout"
 import { exportGraphJson, exportGraphMermaid } from "../lib/graph/exportGraph"
@@ -71,9 +71,16 @@ const createUniqueId = (existingIds: Iterable<string>, prefix: string): string =
 const createLaneId = (graph: GraphModel): string => createUniqueId(graph.lanes.map((lane) => lane.id), "lane")
 const createNodeId = (graph: GraphModel): string => createUniqueId(graph.nodes.map((node) => node.id), "node")
 const createEdgeId = (graph: GraphModel): string => createUniqueId(graph.edges.map((edge) => edge.id), "edge")
+const laneIconValues = new Set<LaneIcon>(["rocket", "clipboard", "settings", "alert", "flag", "none"])
+const normalizeLaneIcon = (icon: unknown): LaneIcon | undefined => (typeof icon === "string" && laneIconValues.has(icon as LaneIcon) ? (icon as LaneIcon) : undefined)
+const edgeTypeValues = new Set<DiagramEdgeType>(["straight", "default", "step", "smoothstep"])
+const normalizeEdgeType = (type: unknown): DiagramEdgeType => (typeof type === "string" && edgeTypeValues.has(type as DiagramEdgeType) ? (type as DiagramEdgeType) : "straight")
 
 const sanitizeGraph = (graph: GraphModel): GraphModel => {
-  const lanes = normalizeLanes(graph.lanes)
+  const lanes = normalizeLanes(graph.lanes).map((lane) => ({
+    ...lane,
+    icon: normalizeLaneIcon(lane.icon),
+  }))
   const laneIds = new Set(lanes.map((lane) => lane.id))
   const fallbackLaneId = lanes[0]?.id ?? ""
   const nodes = graph.nodes.map((node) => ({
@@ -91,7 +98,7 @@ const sanitizeGraph = (graph: GraphModel): GraphModel => {
     .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
     .map((edge) => ({
       ...edge,
-      type: "smoothstep" as const,
+      type: normalizeEdgeType(edge.type),
       label: edge.label ?? edge.data?.label,
       data: {
         ...edge.data,
@@ -125,6 +132,7 @@ const parseJsonGraph = (json: string): GraphModel | null => {
         arrowDirection?: DiagramEdgeArrow
         sourceHandle?: string
         targetHandle?: string
+        type?: DiagramEdgeType
         data?: { label?: string; arrowDirection?: DiagramEdgeArrow }
       }>
     }
@@ -134,6 +142,7 @@ const parseJsonGraph = (json: string): GraphModel | null => {
       id: String(lane.id || `lane-${index + 1}`),
       title: lane.title || `Lane ${index + 1}`,
       color: lane.color || laneColors[index % laneColors.length],
+      icon: normalizeLaneIcon(lane.icon),
       x: Number(lane.x) || 0,
       width: Number(lane.width) || 220,
     }))
@@ -157,7 +166,7 @@ const parseJsonGraph = (json: string): GraphModel | null => {
         target: edge.target,
         sourceHandle: edge.sourceHandle,
         targetHandle: edge.targetHandle,
-        type: "smoothstep",
+        type: normalizeEdgeType(edge.type),
         label: edge.label ?? edge.data?.label,
         data: {
           label: edge.label ?? edge.data?.label,
@@ -212,6 +221,7 @@ type EditorStore = {
   addEdge: (input: { source: string; target: string; sourceHandle?: string | null; targetHandle?: string | null; label?: string; arrowDirection?: DiagramEdgeArrow }) => string | null
   updateEdgeLabel: (edgeId: string, label: string) => void
   updateEdgeArrowDirection: (edgeId: string, arrowDirection: DiagramEdgeArrow) => void
+  updateEdgeType: (edgeId: string, type: DiagramEdgeType) => void
   reverseEdgeDirection: (edgeId: string) => void
   deleteEdge: (edgeId: string) => void
   deleteSelection: () => void
@@ -219,12 +229,13 @@ type EditorStore = {
   deleteLane: (laneId: string) => boolean
   updateLaneTitle: (laneId: string, title: string) => void
   updateLaneColor: (laneId: string, color: string) => void
+  updateLaneIcon: (laneId: string, icon: LaneIcon) => void
   canDeleteLane: (laneId: string) => boolean
   toggleGrid: () => void
   setZoom: (zoom: number) => void
   setActiveTool: (tool: CanvasTool) => void
   setPendingEdgeArrowDirection: (arrowDirection: DiagramEdgeArrow) => void
-  autoLayoutGraph: () => void
+  autoLayoutGraph: () => boolean
   undo: () => void
   redo: () => void
   exportJson: () => string
@@ -456,7 +467,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           target: input.target,
           sourceHandle: input.sourceHandle ?? undefined,
           targetHandle: input.targetHandle ?? undefined,
-          type: "smoothstep",
+          type: "straight",
           label,
           data: { label, arrowDirection },
         },
@@ -479,6 +490,13 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     commitGraph(set, get, {
       ...graph,
       edges: graph.edges.map((edge) => (edge.id === edgeId ? { ...edge, data: { ...edge.data, arrowDirection } } : edge)),
+    })
+  },
+  updateEdgeType: (edgeId, type) => {
+    const graph = get().graph
+    commitGraph(set, get, {
+      ...graph,
+      edges: graph.edges.map((edge) => (edge.id === edgeId ? { ...edge, type } : edge)),
     })
   },
   reverseEdgeDirection: (edgeId) => {
@@ -522,6 +540,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       id,
       title: title?.trim() || `Lane ${graph.lanes.length + 1}`,
       color: laneColors[graph.lanes.length % laneColors.length],
+      icon: "none" as LaneIcon,
       x: 0,
       width: 220,
     }
@@ -569,11 +588,25 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       lanes: graph.lanes.map((lane) => (lane.id === laneId ? { ...lane, color } : lane)),
     })
   },
+  updateLaneIcon: (laneId, icon) => {
+    const graph = get().graph
+    commitGraph(set, get, {
+      ...graph,
+      lanes: graph.lanes.map((lane) => (lane.id === laneId ? { ...lane, icon } : lane)),
+    })
+  },
   toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
   setZoom: (zoom) => set({ zoom }),
   setActiveTool: (activeTool) => set({ activeTool }),
   setPendingEdgeArrowDirection: (pendingEdgeArrowDirection) => set({ pendingEdgeArrowDirection }),
-  autoLayoutGraph: () => commitGraph(set, get, autoLayoutGraph(get().graph)),
+  autoLayoutGraph: () => {
+    const graph = get().graph
+    if (graph.nodes.length === 0) return false
+    const nextGraph = autoLayoutGraph(graph)
+    if (JSON.stringify(nextGraph) === JSON.stringify(graph)) return false
+    commitGraph(set, get, nextGraph)
+    return true
+  },
   undo: () => {
     const state = get()
     const previous = state.past.at(-1)

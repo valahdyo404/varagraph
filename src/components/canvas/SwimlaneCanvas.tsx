@@ -80,7 +80,7 @@ export function SwimlaneCanvas() {
   const setZoom = useEditorStore((state) => state.setZoom)
   const setActiveTool = useEditorStore((state) => state.setActiveTool)
   const isPanMode = activeTool === 'Pan'
-  const isConnectorMode = activeTool === 'Connector'
+  const isConnectorMode = activeTool === 'Connector' || activeTool === 'ArrowConnector' || activeTool === 'LineConnector'
   const shapeVariant = toolVariant[activeTool]
   const isShapeMode = Boolean(shapeVariant)
   const isAutoPanActive = isPanMode || (!isConnectorMode && hoveredNodeId === null && !isShapeMode)
@@ -107,7 +107,7 @@ export function SwimlaneCanvas() {
       const targetIsLeft = (target?.position.x ?? 0) < (source?.position.x ?? 0)
       const targetIsAbove = (target?.position.y ?? 0) < (source?.position.y ?? 0)
       const sourceHandle = edge.sourceHandle ?? (sameLane ? (targetIsAbove ? 'top-source' : 'bottom-source') : targetIsLeft ? 'left-source' : 'right-source')
-      const targetHandle = edge.targetHandle ?? (sameLane ? (targetIsAbove ? 'bottom-target' : 'top-target') : targetIsLeft ? 'right-target' : 'left-target')
+      const targetHandle = edge.targetHandle ?? (sameLane ? (targetIsAbove ? 'bottom-gap-target' : 'top-gap-target') : targetIsLeft ? 'right-gap-target' : 'left-gap-target')
       const selected = edge.id === selectedEdgeId
       const arrowDirection = edge.data?.arrowDirection ?? 'forward'
 

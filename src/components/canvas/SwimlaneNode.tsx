@@ -62,6 +62,8 @@ export function SwimlaneNode({ id, data, selected }: NodeProps) {
   const textColor = nodeData.style?.textColor ?? '#0F172A'
   const contentClass = nodeData.variant === 'decision' ? '-rotate-45' : nodeData.variant === 'inputOutput' ? 'skew-x-[8deg]' : ''
   const isDecision = nodeData.variant === 'decision'
+  const targetGap = nodeData.variant === 'decision' ? 18 : 14
+  const sourceGap = 8
 
   const commitLabel = () => {
     updateNodeLabel(String(id), draftLabel)
@@ -73,6 +75,27 @@ export function SwimlaneNode({ id, data, selected }: NodeProps) {
       <Handle id="left-target" type="target" position={Position.Left} className="!h-1 !w-1 !border-0 !bg-transparent" />
       <Handle id="top-target" type="target" position={Position.Top} className="!h-1 !w-1 !border-0 !bg-transparent" />
       <Handle id="bottom-target" type="target" position={Position.Bottom} className="!h-1 !w-1 !border-0 !bg-transparent" />
+      <Handle
+        id="left-gap-target"
+        type="target"
+        position={Position.Left}
+        className="!h-1 !w-1 !border-0 !bg-transparent"
+        style={{ left: -targetGap }}
+      />
+      <Handle
+        id="top-gap-target"
+        type="target"
+        position={Position.Top}
+        className="!h-1 !w-1 !border-0 !bg-transparent"
+        style={{ top: -targetGap }}
+      />
+      <Handle
+        id="bottom-gap-target"
+        type="target"
+        position={Position.Bottom}
+        className="!h-1 !w-1 !border-0 !bg-transparent"
+        style={{ bottom: -targetGap }}
+      />
       <div className={isDecision ? 'flex justify-center py-2' : ''}>
         <div
           onDoubleClick={(event) => {
@@ -108,11 +131,18 @@ export function SwimlaneNode({ id, data, selected }: NodeProps) {
           </div>
         </div>
       </div>
-      <Handle id="right-source" type="source" position={Position.Right} className="!h-1 !w-1 !border-0 !bg-transparent" />
-      <Handle id="left-source" type="source" position={Position.Left} className="!h-1 !w-1 !border-0 !bg-transparent" />
-      <Handle id="top-source" type="source" position={Position.Top} className="!h-1 !w-1 !border-0 !bg-transparent" />
-      <Handle id="bottom-source" type="source" position={Position.Bottom} className="!h-1 !w-1 !border-0 !bg-transparent" />
+      <Handle id="right-source" type="source" position={Position.Right} className="!h-1 !w-1 !border-0 !bg-transparent" style={{ right: -sourceGap }} />
+      <Handle id="left-source" type="source" position={Position.Left} className="!h-1 !w-1 !border-0 !bg-transparent" style={{ left: -sourceGap }} />
+      <Handle id="top-source" type="source" position={Position.Top} className="!h-1 !w-1 !border-0 !bg-transparent" style={{ top: -sourceGap }} />
+      <Handle id="bottom-source" type="source" position={Position.Bottom} className="!h-1 !w-1 !border-0 !bg-transparent" style={{ bottom: -sourceGap }} />
       <Handle id="right-target" type="target" position={Position.Right} className="!h-1 !w-1 !border-0 !bg-transparent" />
+      <Handle
+        id="right-gap-target"
+        type="target"
+        position={Position.Right}
+        className="!h-1 !w-1 !border-0 !bg-transparent"
+        style={{ right: -targetGap }}
+      />
     </div>
   )
 }

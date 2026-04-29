@@ -1,19 +1,19 @@
 import { ArrowRight, Circle, Diamond, Grip, Hand, Minus, MousePointer2, MoveDiagonal2, Square, Type, Workflow } from 'lucide-react'
 import { useEditorStore } from '../../store/editorStore'
 
-export type CanvasTool = 'Select' | 'Pan' | 'Connector' | 'Process' | 'Decision' | 'Text' | 'Start' | 'InputOutput'
+export type CanvasTool = 'Select' | 'Pan' | 'Connector' | 'ArrowConnector' | 'LineConnector' | 'Process' | 'Decision' | 'Text' | 'Start' | 'InputOutput'
 
 const tools = [
   { label: 'Select', tool: 'Select', icon: MousePointer2, enabled: true, group: 0 },
   { label: 'Pan', tool: 'Pan', icon: Hand, enabled: true, group: 1 },
   { label: 'Connector', tool: 'Connector', icon: MoveDiagonal2, enabled: true, group: 1 },
-  { label: 'Arrow', tool: 'Connector', icon: ArrowRight, enabled: true, group: 1, arrowDirection: 'forward' },
+  { label: 'Arrow', tool: 'ArrowConnector', icon: ArrowRight, enabled: true, group: 1, arrowDirection: 'forward' },
   { label: 'Text', tool: 'Text', icon: Type, enabled: true, group: 2 },
   { label: 'Input/Output', tool: 'InputOutput', icon: Workflow, enabled: true, group: 2 },
   { label: 'Decision', tool: 'Decision', icon: Diamond, enabled: true, group: 2 },
   { label: 'Rectangle', tool: 'Process', icon: Square, enabled: true, group: 2 },
   { label: 'Circle', tool: 'Start', icon: Circle, enabled: true, group: 2 },
-  { label: 'Line', tool: 'Connector', icon: Minus, enabled: true, group: 2, arrowDirection: 'none' },
+  { label: 'Line', tool: 'LineConnector', icon: Minus, enabled: true, group: 2, arrowDirection: 'none' },
 ] as const
 
 export function CanvasToolbar() {
@@ -28,7 +28,7 @@ export function CanvasToolbar() {
         {tools.map((toolConfig, index) => {
           const { label, tool, icon: Icon, enabled, group } = toolConfig
           const arrowDirection = 'arrowDirection' in toolConfig ? toolConfig.arrowDirection : undefined
-          const active = enabled && activeTool === tool && (tool !== 'Connector' || (arrowDirection ? arrowDirection === pendingEdgeArrowDirection : pendingEdgeArrowDirection === 'forward'))
+          const active = enabled && activeTool === tool
           const previous = tools[index - 1]
           const addDivider = previous && previous.group !== group
 
@@ -44,6 +44,7 @@ export function CanvasToolbar() {
                   onToolChange(tool)
                 }}
                 disabled={!enabled}
+                aria-pressed={active}
                 title={label === 'Line' ? 'Line without arrow' : label === 'Arrow' ? 'Arrow connector' : enabled ? label : `${label} is controlled from Connector/Inspector`}
                 className={`flex h-9 w-9 items-center justify-center rounded-md transition ${
                   active

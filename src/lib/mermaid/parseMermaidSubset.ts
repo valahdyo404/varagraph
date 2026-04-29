@@ -38,7 +38,7 @@ const addEdge = (
     id: `${source}-${target}-${edges.length}`,
     source,
     target,
-    type: "smoothstep",
+    type: "straight",
     label: label.trim() || undefined,
     data: { label: label.trim() || undefined, arrowDirection },
   })

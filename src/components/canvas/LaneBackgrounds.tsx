@@ -1,7 +1,22 @@
 import { ClipboardCheck, Flag, Plus, Rocket, Settings2, Trash2, TriangleAlert } from 'lucide-react'
-import type { Swimlane } from '../../types/graph'
+import type { LaneIcon, Swimlane } from '../../types/graph'
 
-const laneIcons = [Rocket, ClipboardCheck, Settings2, TriangleAlert, Flag]
+const defaultLaneIcons: LaneIcon[] = ['rocket', 'clipboard', 'settings', 'alert', 'flag']
+const laneIconComponents = {
+  rocket: Rocket,
+  clipboard: ClipboardCheck,
+  settings: Settings2,
+  alert: TriangleAlert,
+  flag: Flag,
+} as const
+
+const laneIconColor = (icon: LaneIcon | undefined, index: number) => {
+  if (icon === 'rocket' || (!icon && index === 0)) return 'text-[#6336F1]'
+  if (icon === 'clipboard' || (!icon && index === 1)) return 'text-[#3882F6]'
+  if (icon === 'settings' || (!icon && index === 2)) return 'text-[#0F9F8A]'
+  if (icon === 'alert' || (!icon && index === 3)) return 'text-[#FB6A3C]'
+  return 'text-[#6336F1]'
+}
 
 type LaneBackgroundsProps = {
   lanes: Swimlane[]
@@ -22,7 +37,8 @@ export function LaneBackgrounds({ lanes, height, selectedLaneId, nodeCountsByLan
     <div className="pointer-events-none absolute inset-0 overflow-visible">
       {lanes.map((lane, index) => {
         const selected = lane.id === selectedLaneId
-        const Icon = laneIcons[index % laneIcons.length]
+        const icon = lane.icon ?? defaultLaneIcons[index % defaultLaneIcons.length]
+        const Icon = icon === 'none' ? null : laneIconComponents[icon]
         const nodeCount = nodeCountsByLane.get(lane.id) ?? 0
 
         return (
@@ -45,21 +61,7 @@ export function LaneBackgrounds({ lanes, height, selectedLaneId, nodeCountsByLan
               }`}
               style={{ backgroundColor: lane.color }}
             >
-              <Icon
-                size={22}
-                strokeWidth={1.8}
-                className={
-                  index === 0
-                    ? 'text-[#6336F1]'
-                    : index === 1
-                      ? 'text-[#3882F6]'
-                      : index === 2
-                        ? 'text-[#0F9F8A]'
-                        : index === 3
-                          ? 'text-[#FB6A3C]'
-                          : 'text-[#6336F1]'
-                }
-              />
+              {Icon && <Icon size={22} strokeWidth={1.8} className={laneIconColor(lane.icon, index)} />}
               <span>{lane.title}</span>
               <span className="absolute bottom-2 right-2 rounded-full bg-white/70 px-1.5 text-[9px] font-semibold text-[#64748B]">{nodeCount}</span>
             </button>

@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronLeft, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEditorStore } from '../../store/editorStore'
-import type { DiagramEdgeArrow, DiagramNodeVariant } from '../../types/graph'
+import type { DiagramEdgeArrow, DiagramEdgeType, DiagramNodeVariant, LaneIcon } from '../../types/graph'
 import type { ReactNode } from 'react'
 
 const swatches = ['#F0E8FF', '#EAF2FF', '#E8F8F4', '#FFF0E6', '#F8E8F6']
@@ -18,6 +18,21 @@ const arrowDirections: Array<{ value: DiagramEdgeArrow; label: string }> = [
   { value: 'both', label: 'Both' },
   { value: 'none', label: 'None' },
 ]
+const edgeTypes: Array<{ value: DiagramEdgeType; label: string }> = [
+  { value: 'straight', label: 'Straight' },
+  { value: 'default', label: 'Curved' },
+  { value: 'smoothstep', label: 'Rounded' },
+  { value: 'step', label: 'Step' },
+]
+const laneIcons: Array<{ value: LaneIcon; label: string }> = [
+  { value: 'rocket', label: 'Rocket' },
+  { value: 'clipboard', label: 'Clipboard' },
+  { value: 'settings', label: 'Settings' },
+  { value: 'alert', label: 'Alert' },
+  { value: 'flag', label: 'Flag' },
+  { value: 'none', label: 'No icon' },
+]
+const defaultLaneIcons: LaneIcon[] = ['rocket', 'clipboard', 'settings', 'alert', 'flag']
 
 type InspectorPanelProps = {
   isCollapsed: boolean
@@ -85,6 +100,7 @@ export function InspectorPanel({ isCollapsed, onToggle }: InspectorPanelProps) {
   const graph = useEditorStore((state) => state.graph)
   const updateLaneColor = useEditorStore((state) => state.updateLaneColor)
   const updateLaneTitle = useEditorStore((state) => state.updateLaneTitle)
+  const updateLaneIcon = useEditorStore((state) => state.updateLaneIcon)
   const deleteLane = useEditorStore((state) => state.deleteLane)
   const canDeleteLane = useEditorStore((state) => state.canDeleteLane)
   const updateNodeLabel = useEditorStore((state) => state.updateNodeLabel)
@@ -95,6 +111,7 @@ export function InspectorPanel({ isCollapsed, onToggle }: InspectorPanelProps) {
   const deleteNode = useEditorStore((state) => state.deleteNode)
   const updateEdgeLabel = useEditorStore((state) => state.updateEdgeLabel)
   const updateEdgeArrowDirection = useEditorStore((state) => state.updateEdgeArrowDirection)
+  const updateEdgeType = useEditorStore((state) => state.updateEdgeType)
   const reverseEdgeDirection = useEditorStore((state) => state.reverseEdgeDirection)
   const deleteEdge = useEditorStore((state) => state.deleteEdge)
   const pendingEdgeArrowDirection = useEditorStore((state) => state.pendingEdgeArrowDirection)
@@ -102,6 +119,8 @@ export function InspectorPanel({ isCollapsed, onToggle }: InspectorPanelProps) {
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId)
   const selectedEdge = graph.edges.find((edge) => edge.id === selectedEdgeId)
   const selectedLane = graph.lanes.find((lane) => lane.id === selectedLaneId) ?? (selectedNode ? graph.lanes.find((lane) => lane.id === selectedNode.data.laneId) : undefined)
+  const selectedLaneIndex = selectedLane ? graph.lanes.findIndex((lane) => lane.id === selectedLane.id) : -1
+  const selectedLaneIcon = selectedLane?.icon ?? defaultLaneIcons[Math.max(selectedLaneIndex, 0) % defaultLaneIcons.length]
 
   if (isCollapsed) {
     return (
@@ -198,6 +217,11 @@ export function InspectorPanel({ isCollapsed, onToggle }: InspectorPanelProps) {
                 {arrowDirections.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </SelectField>
             </Row>
+            <Row label="Line">
+              <SelectField value={selectedEdge.type} onChange={(value) => updateEdgeType(selectedEdge.id, value as DiagramEdgeType)}>
+                {edgeTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </SelectField>
+            </Row>
             <button type="button" onClick={() => reverseEdgeDirection(selectedEdge.id)} className="h-8 w-full rounded-md border border-[#E5E7EB] bg-white text-[11px] font-semibold text-[#334155] hover:bg-slate-50">
               Reverse source and target
             </button>
@@ -212,6 +236,11 @@ export function InspectorPanel({ isCollapsed, onToggle }: InspectorPanelProps) {
             <>
               <Row label="Title">
                 <TextInput value={selectedLane.title} onChange={(value) => updateLaneTitle(selectedLane.id, value)} ariaLabel="Lane title" />
+              </Row>
+              <Row label="Icon">
+                <SelectField value={selectedLaneIcon} onChange={(value) => updateLaneIcon(selectedLane.id, value as LaneIcon)}>
+                  {laneIcons.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </SelectField>
               </Row>
               <Row label="Header Background">
                 <div className="flex shrink-0 items-center gap-[3px]">

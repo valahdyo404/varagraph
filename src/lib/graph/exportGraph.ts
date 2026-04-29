@@ -1,4 +1,4 @@
-import type { DiagramEdgeArrow, GraphModel } from "../../types/graph"
+import type { DiagramEdgeArrow, DiagramEdgeType, GraphModel } from "../../types/graph"
 
 export type ExportedGraph = {
   version: "0.2"
@@ -17,6 +17,7 @@ export type ExportedGraph = {
     target: string
     label: string
     arrowDirection: DiagramEdgeArrow
+    type: DiagramEdgeType
     sourceHandle?: string
     targetHandle?: string
   }>
@@ -41,6 +42,7 @@ export const exportGraph = (graph: GraphModel): ExportedGraph => ({
     target: edge.target,
     label: edge.label ?? edge.data?.label ?? "",
     arrowDirection: edge.data?.arrowDirection ?? "forward",
+    type: edge.type,
     sourceHandle: edge.sourceHandle,
     targetHandle: edge.targetHandle,
   })),

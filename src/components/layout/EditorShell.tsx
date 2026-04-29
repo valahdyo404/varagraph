@@ -12,6 +12,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Maximize2,
+  Sparkles,
   MoreHorizontal,
   Plus,
   Redo2,
@@ -271,9 +272,9 @@ function Sidebar({
   )
 }
 
-function EditorToolbarStrip() {
+function EditorToolbarStrip({ onAutoLayout }: { onAutoLayout: () => void }) {
   const zoom = useEditorStore((state) => state.zoom)
-  const autoLayoutGraph = useEditorStore((state) => state.autoLayoutGraph)
+  const hasNodes = useEditorStore((state) => state.graph.nodes.length > 0)
   return (
     <div className="relative flex h-16 shrink-0 items-center justify-center border-b border-[#EEF0F4] bg-white">
       <CanvasToolbar />
@@ -289,8 +290,16 @@ function EditorToolbarStrip() {
             +
           </button>
         </div>
-        <button type="button" onClick={autoLayoutGraph} aria-label="Auto layout" title="Auto layout" className="flex h-9 w-9 items-center justify-center rounded-md border border-[#EEF0F4] bg-white text-[#0F172A] hover:bg-slate-50">
-          <Maximize2 size={16} />
+        <button
+          type="button"
+          onClick={onAutoLayout}
+          disabled={!hasNodes}
+          aria-label="Auto layout diagram"
+          title={hasNodes ? 'Auto layout diagram' : 'Add nodes before auto layout'}
+          className="inline-flex h-9 items-center gap-2 rounded-md border border-[#EEF0F4] bg-white px-3 text-[12px] font-semibold text-[#0F172A] hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-[#9AA4B5]"
+        >
+          <Maximize2 size={15} />
+          Auto layout
         </button>
       </div>
     </div>
@@ -374,6 +383,7 @@ export function EditorShell() {
   const [draftItems, setDraftItems] = useState<DraftItem[]>([{ id: 'draft-1', name: 'Vertical Swimlane...', source: mermaidSource }])
   const [activeDraftId, setActiveDraftId] = useState('draft-1')
   const [shareMessage, setShareMessage] = useState<string | null>(null)
+  const [layoutMessage, setLayoutMessage] = useState<string | null>(null)
   const currentDraft = draftItems.find((draft) => draft.id === activeDraftId) ?? draftItems[0]!
 
   useEffect(() => {
@@ -419,6 +429,14 @@ export function EditorShell() {
     clearMermaid()
   }
 
+
+  const handleAutoLayout = () => {
+    const changed = autoLayoutGraph()
+    setLayoutMessage(changed ? 'Auto layout applied' : 'Diagram already aligned')
+    window.setTimeout(() => setLayoutMessage(null), 1800)
+    setOpenPopover(null)
+  }
+
   const handleShare = async () => {
     const json = exportJson()
     try {
@@ -455,7 +473,7 @@ export function EditorShell() {
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar openPopover={openPopover} onTogglePopover={togglePopover} onShare={handleShare} onExport={handleExport} onExportMermaid={handleExportMermaid} onReset={handleReset} onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} />
-        <EditorToolbarStrip />
+        <EditorToolbarStrip onAutoLayout={handleAutoLayout} />
         <main className="relative flex min-h-0 flex-1 gap-[18px] overflow-hidden bg-[#FBFCFE] px-3 pb-[10px] pt-4">
           <MermaidPanel
             isCollapsed={isMermaidCollapsed}
@@ -481,7 +499,7 @@ export function EditorShell() {
                 <FileCode2 size={15} />
                 Import JSON
               </button>
-              <button type="button" onClick={autoLayoutGraph} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+              <button type="button" onClick={handleAutoLayout} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
                 <LayoutDashboard size={15} />
                 Auto layout
               </button>
@@ -491,6 +509,7 @@ export function EditorShell() {
         <BottomTabs draftItems={draftItems} activeDraftId={activeDraftId} onSelectDraft={setActiveDraftId} onAddDraft={addDraft} />
       </div>
       {shareMessage && <div className="absolute bottom-16 right-5 rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white shadow-lg">{shareMessage}</div>}
+      {layoutMessage && <div className="absolute bottom-16 left-1/2 -translate-x-1/2 rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white shadow-lg"><Sparkles size={13} className="mr-1 inline" />{layoutMessage}</div>}
     </div>
   )
 }
