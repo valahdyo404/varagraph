@@ -7,24 +7,28 @@ const tools = [
   { label: 'Select', tool: 'Select', icon: MousePointer2, enabled: true, group: 0 },
   { label: 'Pan', tool: 'Pan', icon: Hand, enabled: true, group: 1 },
   { label: 'Connector', tool: 'Connector', icon: MoveDiagonal2, enabled: true, group: 1 },
-  { label: 'Arrow', tool: 'Connector', icon: ArrowRight, enabled: false, group: 1 },
+  { label: 'Arrow', tool: 'Connector', icon: ArrowRight, enabled: true, group: 1, arrowDirection: 'forward' },
   { label: 'Text', tool: 'Text', icon: Type, enabled: true, group: 2 },
   { label: 'Input/Output', tool: 'InputOutput', icon: Workflow, enabled: true, group: 2 },
   { label: 'Decision', tool: 'Decision', icon: Diamond, enabled: true, group: 2 },
   { label: 'Rectangle', tool: 'Process', icon: Square, enabled: true, group: 2 },
   { label: 'Circle', tool: 'Start', icon: Circle, enabled: true, group: 2 },
-  { label: 'Line', tool: 'Connector', icon: Minus, enabled: false, group: 2 },
+  { label: 'Line', tool: 'Connector', icon: Minus, enabled: true, group: 2, arrowDirection: 'none' },
 ] as const
 
 export function CanvasToolbar() {
   const activeTool = useEditorStore((state) => state.activeTool)
   const onToolChange = useEditorStore((state) => state.setActiveTool)
+  const pendingEdgeArrowDirection = useEditorStore((state) => state.pendingEdgeArrowDirection)
+  const setPendingEdgeArrowDirection = useEditorStore((state) => state.setPendingEdgeArrowDirection)
 
   return (
     <div className="flex items-center gap-2">
       <div className="flex h-10 items-center rounded-md border border-[#EEF0F4] bg-white px-1 shadow-[0_10px_24px_rgba(15,23,42,0.03)]">
-        {tools.map(({ label, tool, icon: Icon, enabled, group }, index) => {
-          const active = enabled && activeTool === tool
+        {tools.map((toolConfig, index) => {
+          const { label, tool, icon: Icon, enabled, group } = toolConfig
+          const arrowDirection = 'arrowDirection' in toolConfig ? toolConfig.arrowDirection : undefined
+          const active = enabled && activeTool === tool && (tool !== 'Connector' || (arrowDirection ? arrowDirection === pendingEdgeArrowDirection : pendingEdgeArrowDirection === 'forward'))
           const previous = tools[index - 1]
           const addDivider = previous && previous.group !== group
 
@@ -34,9 +38,13 @@ export function CanvasToolbar() {
               <button
                 type="button"
                 aria-label={label}
-                onClick={() => enabled && onToolChange(tool)}
+                onClick={() => {
+                  if (!enabled) return
+                  if (arrowDirection) setPendingEdgeArrowDirection(arrowDirection)
+                  onToolChange(tool)
+                }}
                 disabled={!enabled}
-                title={enabled ? label : `${label} is controlled from Connector/Inspector`}
+                title={label === 'Line' ? 'Line without arrow' : label === 'Arrow' ? 'Arrow connector' : enabled ? label : `${label} is controlled from Connector/Inspector`}
                 className={`flex h-9 w-9 items-center justify-center rounded-md transition ${
                   active
                     ? 'bg-[#EEE9FF] text-[#6336F1]'

@@ -236,13 +236,16 @@ const commitGraph = (
   get: () => EditorStore,
   graph: GraphModel,
   selection: CommitSelection = {},
+  mermaidSourceOverride?: string,
 ) => {
   const state = get()
   const nextGraph = sanitizeGraph(graph)
   const past = [...state.past, safeCloneGraph(state.graph)].slice(-maxHistory)
-  persistDraft(nextGraph, state.mermaidSource)
+  const nextMermaidSource = mermaidSourceOverride ?? exportGraphMermaid(nextGraph)
+  persistDraft(nextGraph, nextMermaidSource)
   set({
     graph: nextGraph,
+    mermaidSource: nextMermaidSource,
     past,
     future: [],
     canUndo: past.length > 0,
@@ -276,7 +279,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     }
 
     const graph = autoLayoutGraph(result.graph)
-    persistDraft(graph, source)
     commitGraph(set, get, graph, {
       selectedNodeId: null,
       selectedEdgeId: null,
@@ -284,9 +286,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       laneDeleteMessage: null,
       laneDeleteTargetId: null,
       importError: null,
-    })
-    set({ mermaidSource: source })
-    persistDraft(graph, source)
+    }, source)
     return true
   },
   importJson: (json) => {
@@ -309,7 +309,6 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   resetMermaid: () => {
     const result = parseMermaidSubset(defaultMermaid)
     const graph = result.ok ? autoLayoutGraph(result.graph) : fallbackGraph
-    set({ mermaidSource: defaultMermaid })
     commitGraph(set, get, graph, {
       selectedNodeId: null,
       selectedEdgeId: null,
@@ -317,7 +316,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       laneDeleteMessage: null,
       laneDeleteTargetId: null,
       importError: result.ok ? null : result.error.message,
-    })
+    }, defaultMermaid)
   },
   clearSelection: () => set({ selectedNodeId: null, selectedEdgeId: null, selectedLaneId: null, laneDeleteMessage: null, laneDeleteTargetId: null }),
   selectNode: (nodeId) => set({ selectedNodeId: nodeId, selectedEdgeId: null, selectedLaneId: null, laneDeleteMessage: null, laneDeleteTargetId: null }),
@@ -581,8 +580,9 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     if (!previous) return
     const past = state.past.slice(0, -1)
     const future = [safeCloneGraph(state.graph), ...state.future].slice(0, maxHistory)
-    persistDraft(previous, state.mermaidSource)
-    set({ graph: previous, past, future, canUndo: past.length > 0, canRedo: future.length > 0, selectedNodeId: null, selectedEdgeId: null, selectedLaneId: null, laneDeleteMessage: null, laneDeleteTargetId: null })
+    const mermaidSource = exportGraphMermaid(previous)
+    persistDraft(previous, mermaidSource)
+    set({ graph: previous, mermaidSource, past, future, canUndo: past.length > 0, canRedo: future.length > 0, selectedNodeId: null, selectedEdgeId: null, selectedLaneId: null, laneDeleteMessage: null, laneDeleteTargetId: null })
   },
   redo: () => {
     const state = get()
@@ -590,8 +590,9 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     if (!next) return
     const future = state.future.slice(1)
     const past = [...state.past, safeCloneGraph(state.graph)].slice(-maxHistory)
-    persistDraft(next, state.mermaidSource)
-    set({ graph: next, past, future, canUndo: past.length > 0, canRedo: future.length > 0, selectedNodeId: null, selectedEdgeId: null, selectedLaneId: null, laneDeleteMessage: null, laneDeleteTargetId: null })
+    const mermaidSource = exportGraphMermaid(next)
+    persistDraft(next, mermaidSource)
+    set({ graph: next, mermaidSource, past, future, canUndo: past.length > 0, canRedo: future.length > 0, selectedNodeId: null, selectedEdgeId: null, selectedLaneId: null, laneDeleteMessage: null, laneDeleteTargetId: null })
   },
   exportJson: () => exportGraphJson(get().graph),
   exportMermaid: () => exportGraphMermaid(get().graph),

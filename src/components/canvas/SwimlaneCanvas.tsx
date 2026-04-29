@@ -61,6 +61,7 @@ export function SwimlaneCanvas() {
   const flowRef = useRef<ReactFlowInstance<Node<DiagramNodeData>, Edge> | null>(null)
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 0.75 })
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
+  const [connectorSourceNodeId, setConnectorSourceNodeId] = useState<string | null>(null)
   const panStartRef = useRef<{ pointerId: number; x: number; y: number; viewport: Viewport } | null>(null)
   const mousePanStartRef = useRef<{ x: number; y: number; viewport: Viewport } | null>(null)
   const selectNode = useEditorStore((state) => state.selectNode)
@@ -91,10 +92,10 @@ export function SwimlaneCanvas() {
         type: node.type,
         position: node.position,
         data: node.data,
-        selected: node.id === selectedNodeId,
+        selected: node.id === selectedNodeId || node.id === connectorSourceNodeId,
         className: isPanMode ? 'pointer-events-none' : 'swimlane-diagram-node',
       })),
-    [graph.nodes, selectedNodeId, isPanMode],
+    [graph.nodes, selectedNodeId, connectorSourceNodeId, isPanMode],
   )
 
   const edges = useMemo<Edge[]>(() => {
@@ -137,7 +138,24 @@ export function SwimlaneCanvas() {
 
   const canvasHeight = useMemo(() => Math.max(1048, ...graph.nodes.map((node) => node.position.y + 180)), [graph.nodes])
 
-  const handleNodeClick = useCallback<NodeMouseHandler>((_, node) => selectNode(node.id), [selectNode])
+  const handleNodeClick = useCallback<NodeMouseHandler>((_, node) => {
+    if (isConnectorMode) {
+      if (!connectorSourceNodeId) {
+        setConnectorSourceNodeId(node.id)
+        selectNode(node.id)
+        return
+      }
+      if (connectorSourceNodeId !== node.id) {
+        addEdge({ source: connectorSourceNodeId, target: node.id, arrowDirection: pendingEdgeArrowDirection })
+        setConnectorSourceNodeId(null)
+        return
+      }
+      setConnectorSourceNodeId(null)
+      clearSelection()
+      return
+    }
+    selectNode(node.id)
+  }, [addEdge, clearSelection, connectorSourceNodeId, isConnectorMode, pendingEdgeArrowDirection, selectNode])
 
   const handleEdgeClick = useCallback<EdgeMouseHandler>((event, edge) => {
     event.stopPropagation()
@@ -156,6 +174,7 @@ export function SwimlaneCanvas() {
       setActiveTool('Select')
       return
     }
+    setConnectorSourceNodeId(null)
     clearSelection()
   }, [activeTool, addNode, clearSelection, selectNode, setActiveTool, shapeVariant])
 
@@ -165,6 +184,7 @@ export function SwimlaneCanvas() {
   )
 
   const handleConnect = useCallback((connection: Connection) => {
+    setConnectorSourceNodeId(null)
     addEdge({
       source: connection.source ?? '',
       target: connection.target ?? '',
@@ -327,6 +347,11 @@ export function SwimlaneCanvas() {
         {showGrid && <Background color="#D8DEE9" gap={16} size={0.8} variant={BackgroundVariant.Dots} />}
         <Controls showInteractive={false} position="bottom-left" />
       </ReactFlow>
+      {isConnectorMode && connectorSourceNodeId && (
+        <div className="pointer-events-none absolute left-4 top-4 z-40 rounded-md border border-[#C7B9FF] bg-white/95 px-3 py-2 text-[12px] font-semibold text-[#6336F1] shadow-sm">
+          Click another block to connect from this block
+        </div>
+      )}
       {isPanMode && (
         <div
           className="absolute inset-0 z-30 cursor-grab active:cursor-grabbing"

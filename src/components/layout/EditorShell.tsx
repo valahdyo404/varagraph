@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ChevronRight,
   Cloud,
@@ -375,6 +375,10 @@ export function EditorShell() {
   const [activeDraftId, setActiveDraftId] = useState('draft-1')
   const [shareMessage, setShareMessage] = useState<string | null>(null)
   const currentDraft = draftItems.find((draft) => draft.id === activeDraftId) ?? draftItems[0]!
+
+  useEffect(() => {
+    setDraftItems((items) => items.map((item) => (item.id === activeDraftId ? { ...item, source: mermaidSource } : item)))
+  }, [activeDraftId, mermaidSource])
 
   const setActiveDraftSource = (source: string) => {
     if (!currentDraft) return
