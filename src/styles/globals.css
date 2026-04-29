@@ -112,3 +112,23 @@ button {
 .soft-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
+.react-flow__handle {
+  height: 8px !important;
+  width: 8px !important;
+  border: 1.5px solid #ffffff !important;
+  background: #8b5cf6 !important;
+  opacity: 0;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.react-flow__node:hover .react-flow__handle,
+.connector-active .react-flow__handle {
+  opacity: 1;
+  transform: scale(1.08);
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path {
+  stroke: #6336f1;
+}

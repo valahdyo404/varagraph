@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import {
   ChevronRight,
   Cloud,
@@ -114,12 +114,22 @@ function TopBar({
   onShare,
   onExport,
   onReset,
+  onExportMermaid,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
 }: {
   openPopover: OpenPopover
   onTogglePopover: (popover: Exclude<OpenPopover, null>) => void
   onShare: () => void
   onExport: () => void
   onReset: () => void
+  onExportMermaid: () => void
+  onUndo: () => void
+  onRedo: () => void
+  canUndo: boolean
+  canRedo: boolean
 }) {
   return (
     <header className="relative flex h-[60px] shrink-0 items-center justify-between border-b border-[#EEF0F4] bg-white px-6">
@@ -132,10 +142,10 @@ function TopBar({
 
       <div className="flex items-center gap-5">
         <div className="flex items-center gap-4 text-[#243047]">
-          <button type="button" disabled title="Undo is not available yet" aria-label="Undo" className="text-[#0F172A]">
+          <button type="button" onClick={onUndo} disabled={!canUndo} title="Undo" aria-label="Undo" className={canUndo ? 'text-[#0F172A]' : 'cursor-not-allowed text-[#9AA4B5]'}>
             <Undo2 size={16} strokeWidth={1.8} />
           </button>
-          <button type="button" disabled title="Redo is not available yet" aria-label="Redo" className="text-[#9AA4B5]">
+          <button type="button" onClick={onRedo} disabled={!canRedo} title="Redo" aria-label="Redo" className={canRedo ? 'text-[#0F172A]' : 'cursor-not-allowed text-[#9AA4B5]'}>
             <Redo2 size={16} strokeWidth={1.8} />
           </button>
           <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#64748B]">
@@ -157,9 +167,13 @@ function TopBar({
             <Download size={15} />
             Export JSON
           </button>
+          <button type="button" onClick={onExportMermaid} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+            <FileCode2 size={15} />
+            Export Mermaid
+          </button>
           <button type="button" onClick={onReset} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
             <FileCode2 size={15} />
-            Reset Mermaid
+            Reset starter
           </button>
         </Popover>
       )}
@@ -258,6 +272,8 @@ function Sidebar({
 }
 
 function EditorToolbarStrip() {
+  const zoom = useEditorStore((state) => state.zoom)
+  const autoLayoutGraph = useEditorStore((state) => state.autoLayoutGraph)
   return (
     <div className="relative flex h-16 shrink-0 items-center justify-center border-b border-[#EEF0F4] bg-white">
       <CanvasToolbar />
@@ -267,13 +283,13 @@ function EditorToolbarStrip() {
             -
           </button>
           <div className="h-5 w-px bg-[#EEF0F4]" />
-          <span className="w-16 text-center text-[12px] font-medium">100%</span>
+          <span className="w-16 text-center text-[12px] font-medium">{Math.round(zoom * 100)}%</span>
           <div className="h-5 w-px bg-[#EEF0F4]" />
           <button type="button" disabled aria-label="Zoom in" className="flex h-9 w-10 items-center justify-center text-lg leading-none text-[#0F172A]">
             +
           </button>
         </div>
-        <button type="button" disabled aria-label="Fit to screen" className="flex h-9 w-9 items-center justify-center rounded-md border border-[#EEF0F4] bg-white text-[#0F172A]">
+        <button type="button" onClick={autoLayoutGraph} aria-label="Auto layout" title="Auto layout" className="flex h-9 w-9 items-center justify-center rounded-md border border-[#EEF0F4] bg-white text-[#0F172A] hover:bg-slate-50">
           <Maximize2 size={16} />
         </button>
       </div>
@@ -320,14 +336,18 @@ function BottomTabs({
   )
 }
 
-function downloadJson(json: string) {
-  const blob = new Blob([json], { type: 'application/json' })
+function downloadText(text: string, filename: string, type: string) {
+  const blob = new Blob([text], { type })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = 'varagraph-diagram.json'
+  link.download = filename
   link.click()
   URL.revokeObjectURL(url)
+}
+
+function downloadJson(json: string) {
+  downloadText(json, 'varagraph-diagram.json', 'application/json')
 }
 
 export function EditorShell() {
@@ -336,9 +356,16 @@ export function EditorShell() {
   const importMermaid = useEditorStore((state) => state.importMermaid)
   const clearMermaid = useEditorStore((state) => state.clearMermaid)
   const resetMermaid = useEditorStore((state) => state.resetMermaid)
+  const importJson = useEditorStore((state) => state.importJson)
   const exportJson = useEditorStore((state) => state.exportJson)
+  const exportMermaid = useEditorStore((state) => state.exportMermaid)
+  const undo = useEditorStore((state) => state.undo)
+  const redo = useEditorStore((state) => state.redo)
+  const canUndo = useEditorStore((state) => state.canUndo)
+  const canRedo = useEditorStore((state) => state.canRedo)
   const toggleGrid = useEditorStore((state) => state.toggleGrid)
   const autoLayoutGraph = useEditorStore((state) => state.autoLayoutGraph)
+  const jsonInputRef = useRef<HTMLInputElement | null>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
   const [isMermaidCollapsed, setIsMermaidCollapsed] = useState(true)
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(true)
@@ -361,6 +388,20 @@ export function EditorShell() {
   const handleExport = () => {
     downloadJson(exportJson())
     setOpenPopover(null)
+  }
+
+  const handleExportMermaid = () => {
+    const source = exportMermaid()
+    downloadText(source, 'varagraph-diagram.mmd', 'text/plain')
+    setActiveDraftSource(source)
+    setOpenPopover(null)
+  }
+
+  const handleJsonFileChange = async (file: File | undefined) => {
+    if (!file) return
+    const source = await file.text()
+    importJson(source)
+    if (jsonInputRef.current) jsonInputRef.current.value = ''
   }
 
   const handleReset = () => {
@@ -398,6 +439,7 @@ export function EditorShell() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#FBFCFE] text-[#0F172A]">
+      <input ref={jsonInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => void handleJsonFileChange(event.target.files?.[0])} />
       <Sidebar
         isCollapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed((value) => !value)}
@@ -408,7 +450,7 @@ export function EditorShell() {
         onSettingsTool={() => togglePopover('settings')}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar openPopover={openPopover} onTogglePopover={togglePopover} onShare={handleShare} onExport={handleExport} onReset={handleReset} />
+        <TopBar openPopover={openPopover} onTogglePopover={togglePopover} onShare={handleShare} onExport={handleExport} onExportMermaid={handleExportMermaid} onReset={handleReset} onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} />
         <EditorToolbarStrip />
         <main className="relative flex min-h-0 flex-1 gap-[18px] overflow-hidden bg-[#FBFCFE] px-3 pb-[10px] pt-4">
           <MermaidPanel
@@ -430,6 +472,10 @@ export function EditorShell() {
               <button type="button" onClick={toggleGrid} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
                 <Settings size={15} />
                 Toggle grid
+              </button>
+              <button type="button" onClick={() => jsonInputRef.current?.click()} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+                <FileCode2 size={15} />
+                Import JSON
               </button>
               <button type="button" onClick={autoLayoutGraph} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
                 <LayoutDashboard size={15} />

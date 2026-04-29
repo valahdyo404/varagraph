@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import type { NodeProps } from '@xyflow/react'
 import { Handle, Position } from '@xyflow/react'
 import { AlertCircle, Clipboard, Database, PlayCircle, Power, RefreshCw, ShieldCheck, Trophy, Workflow } from 'lucide-react'
 import type { DiagramNodeData } from '../../types/graph'
 import { nodeWidth } from '../../lib/graph/autoLayout'
+import { useEditorStore } from '../../store/editorStore'
 
 export const SWIMLANE_NODE_WIDTH = nodeWidth
 
@@ -48,8 +50,11 @@ const iconForLabel = (label: string, fallback: typeof Workflow) => {
   return fallback
 }
 
-export function SwimlaneNode({ data, selected }: NodeProps) {
+export function SwimlaneNode({ id, data, selected }: NodeProps) {
   const nodeData = data as DiagramNodeData
+  const updateNodeLabel = useEditorStore((state) => state.updateNodeLabel)
+  const [isEditing, setIsEditing] = useState(false)
+  const [draftLabel, setDraftLabel] = useState(nodeData.label)
   const laneStyle = laneNodeColors[nodeData.laneId] ?? laneNodeColors['lane-3']
   const Icon = iconForLabel(nodeData.label, variantIcon[nodeData.variant])
   const backgroundColor = nodeData.style?.backgroundColor ?? (nodeData.variant === 'decision' ? '#E8F8F4' : laneStyle.bg)
@@ -58,6 +63,11 @@ export function SwimlaneNode({ data, selected }: NodeProps) {
   const contentClass = nodeData.variant === 'decision' ? '-rotate-45' : nodeData.variant === 'inputOutput' ? 'skew-x-[8deg]' : ''
   const isDecision = nodeData.variant === 'decision'
 
+  const commitLabel = () => {
+    updateNodeLabel(String(id), draftLabel)
+    setIsEditing(false)
+  }
+
   return (
     <div className="relative" style={{ width: SWIMLANE_NODE_WIDTH }}>
       <Handle id="left-target" type="target" position={Position.Left} className="!h-1 !w-1 !border-0 !bg-transparent" />
@@ -65,6 +75,11 @@ export function SwimlaneNode({ data, selected }: NodeProps) {
       <Handle id="bottom-target" type="target" position={Position.Bottom} className="!h-1 !w-1 !border-0 !bg-transparent" />
       <div className={isDecision ? 'flex justify-center py-2' : ''}>
         <div
+          onDoubleClick={(event) => {
+            event.stopPropagation()
+            setDraftLabel(nodeData.label)
+            setIsEditing(true)
+          }}
           className={`border shadow-[0_8px_18px_rgba(15,23,42,0.035)] transition ${variantStyle[nodeData.variant]} ${
             isDecision ? 'flex h-[108px] items-center justify-center px-4 py-3' : 'min-h-[62px] px-4 py-3'
           } ${selected ? 'ring-4 ring-[#6B46F2]/18' : ''}`}
@@ -74,7 +89,22 @@ export function SwimlaneNode({ data, selected }: NodeProps) {
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: laneStyle.iconBg, color: laneStyle.icon }}>
               <Icon size={14} strokeWidth={1.9} />
             </span>
-            <span className="line-clamp-3 text-[12px] font-medium leading-4 tracking-normal">{nodeData.label}</span>
+            {isEditing ? (
+              <input
+                autoFocus
+                value={draftLabel}
+                onChange={(event) => setDraftLabel(event.target.value)}
+                onBlur={commitLabel}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') commitLabel()
+                  if (event.key === 'Escape') setIsEditing(false)
+                }}
+                className="nodrag min-w-0 flex-1 rounded border border-[#C7B9FF] bg-white/90 px-1 text-[12px] font-medium leading-4 text-[#0F172A] outline-none"
+                aria-label="Edit node label"
+              />
+            ) : (
+              <span className="line-clamp-3 text-[12px] font-medium leading-4 tracking-normal">{nodeData.label}</span>
+            )}
           </div>
         </div>
       </div>

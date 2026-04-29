@@ -1,4 +1,4 @@
-import type { DiagramEdge, DiagramNode, DiagramNodeVariant, ParseResult, Swimlane } from "../../types/graph"
+import type { DiagramEdge, DiagramEdgeArrow, DiagramNode, DiagramNodeVariant, ParseResult, Swimlane } from "../../types/graph"
 import { autoLayoutGraph } from "../graph/autoLayout"
 
 const laneColors = ["#F0E8FF", "#EAF2FF", "#E8F8F4", "#FFF0E6", "#F8E8F6"]
@@ -24,6 +24,26 @@ const unsupported = (line: number, text: string): ParseResult => ({
   },
 })
 
+const addEdge = (
+  edges: DiagramEdge[],
+  edgeRefs: Set<string>,
+  source: string,
+  target: string,
+  label: string,
+  arrowDirection: DiagramEdgeArrow,
+) => {
+  edgeRefs.add(source)
+  edgeRefs.add(target)
+  edges.push({
+    id: `${source}-${target}-${edges.length}`,
+    source,
+    target,
+    type: "smoothstep",
+    label: label.trim() || undefined,
+    data: { label: label.trim() || undefined, arrowDirection },
+  })
+}
+
 export const parseMermaidSubset = (source: string): ParseResult => {
   if (!source.trim()) {
     return {
@@ -33,7 +53,7 @@ export const parseMermaidSubset = (source: string): ParseResult => {
   }
 
   const rawLines = source.replace(/\r\n/g, "\n").split("\n")
-  const lines = rawLines.map((text, index) => ({ text: text.trim(), line: index + 1 })).filter((line) => line.text)
+  const lines = rawLines.map((text, index) => ({ text: text.trim(), line: index + 1 })).filter((line) => line.text && !line.text.startsWith("%%"))
   const first = lines[0]
 
   if (!first || first.text !== "flowchart LR") {
@@ -61,7 +81,7 @@ export const parseMermaidSubset = (source: string): ParseResult => {
       lanes.push({
         id: currentLaneId,
         title: subgraph[2].trim(),
-        color: laneColors[(lanes.length) % laneColors.length],
+        color: laneColors[lanes.length % laneColors.length],
         x: 0,
         width: 240,
       })
@@ -74,33 +94,45 @@ export const parseMermaidSubset = (source: string): ParseResult => {
       continue
     }
 
+    const bothLabeledEdge = text.match(/^([A-Za-z][\w-]*)\s+<--\s+(.+?)\s+-->\s+([A-Za-z][\w-]*)$/)
+    if (bothLabeledEdge) {
+      const [, source, label, target] = bothLabeledEdge
+      addEdge(edges, edgeRefs, source, target, label, "both")
+      continue
+    }
+
+    const bothEdge = text.match(/^([A-Za-z][\w-]*)\s+<-->\s+([A-Za-z][\w-]*)$/)
+    if (bothEdge) {
+      const [, source, target] = bothEdge
+      addEdge(edges, edgeRefs, source, target, "", "both")
+      continue
+    }
+
+    const noneLabeledEdge = text.match(/^([A-Za-z][\w-]*)\s+--\s+(.+?)\s+---\s+([A-Za-z][\w-]*)$/)
+    if (noneLabeledEdge) {
+      const [, source, label, target] = noneLabeledEdge
+      addEdge(edges, edgeRefs, source, target, label, "none")
+      continue
+    }
+
+    const noneEdge = text.match(/^([A-Za-z][\w-]*)\s+---\s+([A-Za-z][\w-]*)$/)
+    if (noneEdge) {
+      const [, source, target] = noneEdge
+      addEdge(edges, edgeRefs, source, target, "", "none")
+      continue
+    }
+
     const labeledEdge = text.match(/^([A-Za-z][\w-]*)\s+--\s+(.+?)\s+-->\s+([A-Za-z][\w-]*)$/)
     if (labeledEdge) {
       const [, source, label, target] = labeledEdge
-      edgeRefs.add(source)
-      edgeRefs.add(target)
-      edges.push({
-        id: `${source}-${target}-${edges.length}`,
-        source,
-        target,
-        type: "smoothstep",
-        label: label.trim(),
-        data: { label: label.trim() },
-      })
+      addEdge(edges, edgeRefs, source, target, label, "forward")
       continue
     }
 
     const edge = text.match(/^([A-Za-z][\w-]*)\s+-->\s+([A-Za-z][\w-]*)$/)
     if (edge) {
       const [, source, target] = edge
-      edgeRefs.add(source)
-      edgeRefs.add(target)
-      edges.push({
-        id: `${source}-${target}-${edges.length}`,
-        source,
-        target,
-        type: "smoothstep",
-      })
+      addEdge(edges, edgeRefs, source, target, "", "forward")
       continue
     }
 

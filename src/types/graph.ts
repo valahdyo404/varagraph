@@ -8,6 +8,8 @@ export type DiagramNodeStyle = {
   textColor?: string
 }
 
+export type DiagramEdgeArrow = "forward" | "reverse" | "both" | "none"
+
 export type Swimlane = {
   id: LaneId
   title: string
@@ -35,12 +37,15 @@ export type DiagramNode = {
 
 export type DiagramEdgeData = {
   label?: string
+  arrowDirection?: DiagramEdgeArrow
 }
 
 export type DiagramEdge = {
   id: string
   source: string
   target: string
+  sourceHandle?: string
+  targetHandle?: string
   type: "smoothstep"
   animated?: boolean
   label?: string

@@ -1,8 +1,23 @@
-import { ChevronLeft, ChevronDown, SlidersHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronLeft, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEditorStore } from '../../store/editorStore'
+import type { DiagramEdgeArrow, DiagramNodeVariant } from '../../types/graph'
 import type { ReactNode } from 'react'
 
 const swatches = ['#F0E8FF', '#EAF2FF', '#E8F8F4', '#FFF0E6', '#F8E8F6']
+const nodeSwatches = ['#F2E9FF', '#EEF4FF', '#EBF8F5', '#FFF1E8', '#FFFFFF']
+const variants: Array<{ value: DiagramNodeVariant; label: string }> = [
+  { value: 'process', label: 'Process' },
+  { value: 'decision', label: 'Decision' },
+  { value: 'startEnd', label: 'Start / End' },
+  { value: 'inputOutput', label: 'Input / Output' },
+  { value: 'annotation', label: 'Annotation' },
+]
+const arrowDirections: Array<{ value: DiagramEdgeArrow; label: string }> = [
+  { value: 'forward', label: 'Forward' },
+  { value: 'reverse', label: 'Reverse' },
+  { value: 'both', label: 'Both' },
+  { value: 'none', label: 'None' },
+]
 
 type InspectorPanelProps = {
   isCollapsed: boolean
@@ -26,12 +41,14 @@ function ColorField({ value }: { value: string }) {
   )
 }
 
-function SelectField({ value }: { value: string }) {
+function SelectField({ value, children, onChange }: { value: string; children: ReactNode; onChange: (value: string) => void }) {
   return (
-    <div className="flex h-8 min-w-[92px] items-center justify-between rounded-md border border-[#E5E7EB] bg-white px-2 text-[11px] font-medium text-[#334155]">
-      {value}
-      <ChevronDown size={13} className="text-[#94A3B8]" />
-    </div>
+    <label className="relative flex h-8 min-w-[112px] items-center rounded-md border border-[#E5E7EB] bg-white text-[11px] font-medium text-[#334155]">
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="h-full w-full appearance-none rounded-md bg-transparent px-2 pr-6 outline-none">
+        {children}
+      </select>
+      <ChevronDown size={13} className="pointer-events-none absolute right-2 text-[#94A3B8]" />
+    </label>
   )
 }
 
@@ -53,13 +70,38 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+function TextInput({ value, onChange, ariaLabel }: { value: string; onChange: (value: string) => void; ariaLabel: string }) {
+  return <input value={value} onChange={(event) => onChange(event.target.value)} aria-label={ariaLabel} className="h-8 min-w-0 flex-1 rounded-md border border-[#E5E7EB] bg-white px-2 text-[11px] font-medium text-[#334155] outline-none focus:border-[#8B5CF6]" />
+}
+
 export function InspectorPanel({ isCollapsed, onToggle }: InspectorPanelProps) {
   const showGrid = useEditorStore((state) => state.showGrid)
   const toggleGrid = useEditorStore((state) => state.toggleGrid)
   const selectedLaneId = useEditorStore((state) => state.selectedLaneId)
+  const selectedNodeId = useEditorStore((state) => state.selectedNodeId)
+  const selectedEdgeId = useEditorStore((state) => state.selectedEdgeId)
+  const laneDeleteMessage = useEditorStore((state) => state.laneDeleteMessage)
+  const laneDeleteTargetId = useEditorStore((state) => state.laneDeleteTargetId)
   const graph = useEditorStore((state) => state.graph)
   const updateLaneColor = useEditorStore((state) => state.updateLaneColor)
-  const selectedLane = graph.lanes.find((lane) => lane.id === selectedLaneId) ?? graph.lanes[0]
+  const updateLaneTitle = useEditorStore((state) => state.updateLaneTitle)
+  const deleteLane = useEditorStore((state) => state.deleteLane)
+  const canDeleteLane = useEditorStore((state) => state.canDeleteLane)
+  const updateNodeLabel = useEditorStore((state) => state.updateNodeLabel)
+  const updateNodeVariant = useEditorStore((state) => state.updateNodeVariant)
+  const updateNodeStyle = useEditorStore((state) => state.updateNodeStyle)
+  const resetNodeStyle = useEditorStore((state) => state.resetNodeStyle)
+  const moveNodeToLane = useEditorStore((state) => state.moveNodeToLane)
+  const deleteNode = useEditorStore((state) => state.deleteNode)
+  const updateEdgeLabel = useEditorStore((state) => state.updateEdgeLabel)
+  const updateEdgeArrowDirection = useEditorStore((state) => state.updateEdgeArrowDirection)
+  const reverseEdgeDirection = useEditorStore((state) => state.reverseEdgeDirection)
+  const deleteEdge = useEditorStore((state) => state.deleteEdge)
+  const pendingEdgeArrowDirection = useEditorStore((state) => state.pendingEdgeArrowDirection)
+  const setPendingEdgeArrowDirection = useEditorStore((state) => state.setPendingEdgeArrowDirection)
+  const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId)
+  const selectedEdge = graph.edges.find((edge) => edge.id === selectedEdgeId)
+  const selectedLane = graph.lanes.find((lane) => lane.id === selectedLaneId) ?? (selectedNode ? graph.lanes.find((lane) => lane.id === selectedNode.data.laneId) : undefined)
 
   if (isCollapsed) {
     return (
@@ -111,52 +153,93 @@ export function InspectorPanel({ isCollapsed, onToggle }: InspectorPanelProps) {
             <span className="text-[11px] font-medium text-[#334155]">Grid</span>
             <Toggle checked={showGrid} />
           </button>
-          <Row label="Dot size">
-            <SelectField value="Small" />
+          <Row label="New edge">
+            <SelectField value={pendingEdgeArrowDirection} onChange={(value) => setPendingEdgeArrowDirection(value as DiagramEdgeArrow)}>
+              {arrowDirections.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </SelectField>
           </Row>
         </Section>
+
+        {selectedNode && (
+          <Section title="Selected Node">
+            <Row label="Label">
+              <TextInput value={selectedNode.data.label} onChange={(value) => updateNodeLabel(selectedNode.id, value)} ariaLabel="Node label" />
+            </Row>
+            <Row label="Type">
+              <SelectField value={selectedNode.data.variant} onChange={(value) => updateNodeVariant(selectedNode.id, value as DiagramNodeVariant)}>
+                {variants.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </SelectField>
+            </Row>
+            <Row label="Lane">
+              <SelectField value={selectedNode.data.laneId} onChange={(value) => moveNodeToLane(selectedNode.id, value)}>
+                {graph.lanes.map((lane) => <option key={lane.id} value={lane.id}>{lane.title}</option>)}
+              </SelectField>
+            </Row>
+            <Row label="Fill">
+              <div className="flex shrink-0 items-center gap-[3px]">
+                {nodeSwatches.map((color) => (
+                  <button key={color} type="button" onClick={() => updateNodeStyle(selectedNode.id, { backgroundColor: color })} className="h-[12px] w-[12px] rounded-[3px] border border-[#DDE3EC]" style={{ backgroundColor: color }} aria-label={`Set node fill ${color}`} />
+                ))}
+              </div>
+            </Row>
+            <button type="button" onClick={() => deleteNode(selectedNode.id)} className="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-red-200 bg-red-50 text-[11px] font-semibold text-red-600 hover:bg-red-100">
+              <Trash2 size={13} /> Delete node
+            </button>
+          </Section>
+        )}
+
+        {selectedEdge && (
+          <Section title="Selected Edge">
+            <Row label="Label">
+              <TextInput value={selectedEdge.label ?? ''} onChange={(value) => updateEdgeLabel(selectedEdge.id, value)} ariaLabel="Edge label" />
+            </Row>
+            <Row label="Arrow">
+              <SelectField value={selectedEdge.data?.arrowDirection ?? 'forward'} onChange={(value) => updateEdgeArrowDirection(selectedEdge.id, value as DiagramEdgeArrow)}>
+                {arrowDirections.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </SelectField>
+            </Row>
+            <button type="button" onClick={() => reverseEdgeDirection(selectedEdge.id)} className="h-8 w-full rounded-md border border-[#E5E7EB] bg-white text-[11px] font-semibold text-[#334155] hover:bg-slate-50">
+              Reverse source and target
+            </button>
+            <button type="button" onClick={() => deleteEdge(selectedEdge.id)} className="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-red-200 bg-red-50 text-[11px] font-semibold text-red-600 hover:bg-red-100">
+              <Trash2 size={13} /> Delete edge
+            </button>
+          </Section>
+        )}
 
         <Section title="Swimlanes">
-          <Row label="Header Background">
-            <div className="flex shrink-0 items-center gap-[3px]">
-              {swatches.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => selectedLane && updateLaneColor(selectedLane.id, color)}
-                  className="h-[12px] w-[12px] rounded-[3px] border border-[#DDE3EC] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]"
-                  style={{ backgroundColor: color }}
-                  aria-label={`Set lane color ${color}`}
-                />
-              ))}
-              <button type="button" className="h-[22px] w-[32px] rounded-[4px] border border-[#E5E7EB] bg-white text-[9px] font-medium leading-none text-[#334155] shadow-[0_1px_2px_rgba(15,23,42,0.02)]">
-                More
+          {selectedLane ? (
+            <>
+              <Row label="Title">
+                <TextInput value={selectedLane.title} onChange={(value) => updateLaneTitle(selectedLane.id, value)} ariaLabel="Lane title" />
+              </Row>
+              <Row label="Header Background">
+                <div className="flex shrink-0 items-center gap-[3px]">
+                  {swatches.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => updateLaneColor(selectedLane.id, color)}
+                      className="h-[12px] w-[12px] rounded-[3px] border border-[#DDE3EC] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.45)]"
+                      style={{ backgroundColor: color }}
+                      aria-label={`Set lane color ${color}`}
+                    />
+                  ))}
+                </div>
+              </Row>
+              <button type="button" onClick={() => deleteLane(selectedLane.id)} className={`flex h-8 w-full items-center justify-center gap-2 rounded-md border border-[#E5E7EB] bg-white text-[11px] font-semibold hover:bg-slate-50 ${canDeleteLane(selectedLane.id) ? 'text-[#334155]' : 'text-[#94A3B8]'}`}>
+                <Trash2 size={13} /> Delete lane
               </button>
-            </div>
-          </Row>
-          <Row label="Header Text">
-            <ColorField value="#374151" />
-          </Row>
-          <Row label="Lane Border">
-            <ColorField value="#E5E7EB" />
-          </Row>
-        </Section>
-
-        <Section title="Shapes">
-          <Row label="Corner Radius">
-            <SelectField value="12" />
-          </Row>
-          <Row label="Soft Shadows">
-            <Toggle checked />
-          </Row>
+              {laneDeleteMessage && laneDeleteTargetId === selectedLane.id && <p className="rounded-md border border-orange-200 bg-orange-50 px-2 py-1.5 text-[11px] font-medium leading-4 text-orange-700">{laneDeleteMessage}</p>}
+            </>
+          ) : (
+            <p className="text-[11px] leading-5 text-[#64748B]">Select a lane header, node, or edge to edit its properties.</p>
+          )}
         </Section>
 
         <Section title="Text">
           <Row label="Font Family">
-            <SelectField value="Inter" />
-          </Row>
-          <Row label="Font Size">
-            <SelectField value="14" />
+            <ColorField value="Inter" />
           </Row>
           <Row label="Text Color">
             <ColorField value="#374151" />
@@ -165,7 +248,7 @@ export function InspectorPanel({ isCollapsed, onToggle }: InspectorPanelProps) {
       </div>
 
       <div className="border-t border-[#EEF0F4] p-[13px]">
-        <button type="button" className="h-9 w-full rounded-[5px] border border-[#8B5CF6] bg-white text-[12px] font-medium text-[#6336F1] hover:bg-[#F8F5FF]">
+        <button type="button" onClick={() => selectedNode && resetNodeStyle(selectedNode.id)} disabled={!selectedNode} className="h-9 w-full rounded-[5px] border border-[#8B5CF6] bg-white text-[12px] font-medium text-[#6336F1] hover:bg-[#F8F5FF] disabled:cursor-not-allowed disabled:border-[#E5E7EB] disabled:text-[#94A3B8]">
           Reset Style
         </button>
       </div>
