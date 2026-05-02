@@ -20,13 +20,16 @@ import {
   Share2,
   Trash2,
   Undo2,
+  X,
 } from 'lucide-react'
 import { MermaidPanel } from '../panels/MermaidPanel'
 import { CanvasToolbar } from '../toolbar/CanvasToolbar'
 import { SwimlaneCanvas } from '../canvas/SwimlaneCanvas'
 import { InspectorPanel } from '../panels/InspectorPanel'
+import { SidebarFeaturePages } from './SidebarFeaturePages'
 import { useEditorStore } from '../../store/editorStore'
 import { defaultMermaid } from '../../lib/mermaid/defaultMermaid'
+import type { GraphModel } from '../../types/graph'
 
 const workspaceItems = [
   { label: 'Dashboard', icon: Home },
@@ -42,12 +45,18 @@ const toolItems = [
 ]
 
 type OpenPopover = null | 'more' | 'settings'
+type NavItem = { label: string; icon: typeof Home }
 
 type DraftItem = {
   id: string
   name: string
   source: string
+  graph: GraphModel
 }
+
+const emptyGraph = (): GraphModel => ({ lanes: [], nodes: [], edges: [] })
+
+const cloneGraph = (graph: GraphModel): GraphModel => JSON.parse(JSON.stringify(graph)) as GraphModel
 
 function VaragraphMark({ size = 28 }: { size?: number }) {
   return (
@@ -76,7 +85,7 @@ function SidebarSection({
   onItemClick,
 }: {
   title: string
-  items: typeof workspaceItems
+  items: NavItem[]
   activeItem?: string
   onItemClick: (label: string) => void
 }) {
@@ -95,8 +104,8 @@ function SidebarSection({
                 active ? 'bg-[#EEE9FF] text-[#6336F1]' : 'text-[#374151] hover:bg-white hover:text-[#0F172A]'
               }`}
             >
-              <Icon size={16} strokeWidth={1.9} />
-              {label}
+              <Icon size={16} strokeWidth={1.9} className="shrink-0" />
+              <span className="whitespace-nowrap">{label}</span>
             </button>
           )
         })}
@@ -234,7 +243,7 @@ function Sidebar({
   }
 
   return (
-    <aside className="flex w-[192px] shrink-0 flex-col border-r border-[#EEF0F4] bg-[#FAFAFC] px-[10px] py-5">
+    <aside className="flex w-[210px] shrink-0 flex-col border-r border-[#EEF0F4] bg-[#FAFAFC] px-[10px] py-5">
       <div className="flex items-center justify-between gap-3 px-2">
         <div className="flex items-center gap-3">
           <VaragraphMark size={26} />
@@ -254,15 +263,15 @@ function Sidebar({
       <nav className="mt-8 flex flex-1 flex-col">
         <SidebarSection title="WORKSPACE" items={workspaceItems} activeItem={activeWorkspaceSection} onItemClick={onWorkspaceChange} />
         <div className="mt-4 border-t border-[#EEF0F4] pt-4">
-          <SidebarSection title="TOOLS" items={toolItems} onItemClick={handleToolClick} />
+          <SidebarSection title="TOOLS" items={toolItems} activeItem={activeWorkspaceSection} onItemClick={handleToolClick} />
         </div>
       </nav>
 
       <button type="button" disabled title="Workspace account menu is not available yet" aria-label="Workspace account menu" className="mb-[-4px] rounded-md border border-[#E5E7EB] bg-white px-2 py-2 text-left">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#6336F1] text-sm font-semibold text-white">A</div>
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#6336F1] text-sm font-semibold text-white">V</div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-medium text-[#0F172A]">andi@example.com</p>
+            <p className="truncate text-[12px] font-medium text-[#0F172A]">valahdyo</p>
             <p className="truncate text-[10px] text-[#8A94A6]">Pro Plan</p>
           </div>
           <ChevronRight size={13} className="text-[#94A3B8]" />
@@ -311,11 +320,13 @@ function BottomTabs({
   activeDraftId,
   onSelectDraft,
   onAddDraft,
+  onCloseDraft,
 }: {
   draftItems: DraftItem[]
   activeDraftId: string
   onSelectDraft: (id: string) => void
   onAddDraft: () => void
+  onCloseDraft: (id: string) => void
 }) {
   return (
     <footer className="flex h-[58px] shrink-0 items-center justify-between border-t border-[#EEF0F4] bg-white px-[14px]">
@@ -327,10 +338,31 @@ function BottomTabs({
               key={draft.id}
               type="button"
               onClick={() => onSelectDraft(draft.id)}
-              className={`flex h-9 min-w-[154px] items-center gap-2 rounded-md border px-3 text-[12px] font-medium ${active ? 'border-[#E6DFFF] bg-[#F8F5FF] text-[#6336F1]' : 'border-[#E5E7EB] text-[#64748B] hover:bg-slate-50'}`}
+              className={`group flex h-9 min-w-[154px] max-w-[210px] items-center gap-2 rounded-md border px-3 text-[12px] font-medium ${active ? 'border-[#E6DFFF] bg-[#F8F5FF] text-[#6336F1]' : 'border-[#E5E7EB] text-[#64748B] hover:bg-slate-50'}`}
             >
-              <FileCode2 size={14} />
-              {draft.name}
+              <FileCode2 size={14} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-left">{draft.name}</span>
+              {draftItems.length > 1 && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Close ${draft.name}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onCloseDraft(draft.id)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onCloseDraft(draft.id)
+                    }
+                  }}
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${active ? 'text-[#6336F1] hover:bg-[#E6DFFF]' : 'text-[#94A3B8] hover:bg-[#EEF0F4] hover:text-[#334155]'}`}
+                >
+                  <X size={12} strokeWidth={2} />
+                </span>
+              )}
             </button>
           )
         })}
@@ -361,10 +393,12 @@ function downloadJson(json: string) {
 
 export function EditorShell() {
   const mermaidSource = useEditorStore((state) => state.mermaidSource)
+  const graph = useEditorStore((state) => state.graph)
   const importError = useEditorStore((state) => state.importError)
   const importMermaid = useEditorStore((state) => state.importMermaid)
   const clearMermaid = useEditorStore((state) => state.clearMermaid)
   const resetMermaid = useEditorStore((state) => state.resetMermaid)
+  const replaceDraft = useEditorStore((state) => state.replaceDraft)
   const importJson = useEditorStore((state) => state.importJson)
   const exportJson = useEditorStore((state) => state.exportJson)
   const exportMermaid = useEditorStore((state) => state.exportMermaid)
@@ -375,20 +409,33 @@ export function EditorShell() {
   const toggleGrid = useEditorStore((state) => state.toggleGrid)
   const autoLayoutGraph = useEditorStore((state) => state.autoLayoutGraph)
   const jsonInputRef = useRef<HTMLInputElement | null>(null)
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true)
+  const loadingDraftRef = useRef(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMermaidCollapsed, setIsMermaidCollapsed] = useState(true)
   const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(true)
-  const [activeWorkspaceSection, setActiveWorkspaceSection] = useState('Diagrams')
+  const [activeWorkspaceSection, setActiveWorkspaceSection] = useState(() => {
+    const hashSection = window.location.hash.replace('#', '')
+    if (hashSection === 'templates') return 'Templates'
+    if (hashSection === 'diagrams') return 'Diagrams'
+    if (hashSection === 'import') return 'Import (Mermaid)'
+    if (hashSection === 'export') return 'Export'
+    if (hashSection === 'settings') return 'Settings'
+    return 'Dashboard'
+  })
   const [openPopover, setOpenPopover] = useState<OpenPopover>(null)
-  const [draftItems, setDraftItems] = useState<DraftItem[]>([{ id: 'draft-1', name: 'Vertical Swimlane...', source: mermaidSource }])
+  const [draftItems, setDraftItems] = useState<DraftItem[]>([{ id: 'draft-1', name: 'Vertical Swimlane...', source: mermaidSource, graph: cloneGraph(graph) }])
   const [activeDraftId, setActiveDraftId] = useState('draft-1')
   const [shareMessage, setShareMessage] = useState<string | null>(null)
   const [layoutMessage, setLayoutMessage] = useState<string | null>(null)
   const currentDraft = draftItems.find((draft) => draft.id === activeDraftId) ?? draftItems[0]!
 
   useEffect(() => {
-    setDraftItems((items) => items.map((item) => (item.id === activeDraftId ? { ...item, source: mermaidSource } : item)))
-  }, [activeDraftId, mermaidSource])
+    if (loadingDraftRef.current) {
+      loadingDraftRef.current = false
+      return
+    }
+    setDraftItems((items) => items.map((item) => (item.id === activeDraftId ? { ...item, source: mermaidSource, graph: cloneGraph(graph) } : item)))
+  }, [activeDraftId, graph, mermaidSource])
 
   const setActiveDraftSource = (source: string) => {
     if (!currentDraft) return
@@ -453,10 +500,37 @@ export function EditorShell() {
     }
   }
 
+  const selectDraft = (id: string) => {
+    const draft = draftItems.find((item) => item.id === id)
+    if (!draft) return
+    loadingDraftRef.current = true
+    setActiveDraftId(id)
+    replaceDraft(draft.graph, draft.source)
+    setActiveWorkspaceSection('Diagrams')
+  }
+
   const addDraft = () => {
     const id = `draft-${Date.now()}`
-    setDraftItems((items) => [...items, { id, name: 'Untitled', source: '' }])
+    const graph = emptyGraph()
+    const draft = { id, name: `Untitled ${draftItems.length + 1}`, source: '', graph }
+    loadingDraftRef.current = true
+    setDraftItems((items) => [...items, draft])
     setActiveDraftId(id)
+    replaceDraft(graph, '')
+    setActiveWorkspaceSection('Diagrams')
+  }
+
+  const closeDraft = (id: string) => {
+    if (draftItems.length === 1) return
+    const closingIndex = draftItems.findIndex((item) => item.id === id)
+    const nextItems = draftItems.filter((item) => item.id !== id)
+    if (id === activeDraftId) {
+      const nextActive = nextItems[Math.max(0, closingIndex - 1)] ?? nextItems[0]
+      loadingDraftRef.current = true
+      setActiveDraftId(nextActive.id)
+      replaceDraft(nextActive.graph, nextActive.source)
+    }
+    setDraftItems(nextItems)
   }
 
   return (
@@ -467,46 +541,61 @@ export function EditorShell() {
         onToggle={() => setIsSidebarCollapsed((value) => !value)}
         activeWorkspaceSection={activeWorkspaceSection}
         onWorkspaceChange={setActiveWorkspaceSection}
-        onImportTool={() => setIsMermaidCollapsed(false)}
-        onExportTool={handleExport}
-        onSettingsTool={() => togglePopover('settings')}
+        onImportTool={() => setActiveWorkspaceSection('Import (Mermaid)')}
+        onExportTool={() => setActiveWorkspaceSection('Export')}
+        onSettingsTool={() => setActiveWorkspaceSection('Settings')}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar openPopover={openPopover} onTogglePopover={togglePopover} onShare={handleShare} onExport={handleExport} onExportMermaid={handleExportMermaid} onReset={handleReset} onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} />
-        <EditorToolbarStrip onAutoLayout={handleAutoLayout} />
-        <main className="relative flex min-h-0 flex-1 gap-[18px] overflow-hidden bg-[#FBFCFE] px-3 pb-[10px] pt-4">
-          <MermaidPanel
-            isCollapsed={isMermaidCollapsed}
-            onToggle={() => setIsMermaidCollapsed((value) => !value)}
+        {activeWorkspaceSection === 'Diagrams' ? (
+          <>
+            <TopBar openPopover={openPopover} onTogglePopover={togglePopover} onShare={handleShare} onExport={handleExport} onExportMermaid={handleExportMermaid} onReset={handleReset} onUndo={undo} onRedo={redo} canUndo={canUndo} canRedo={canRedo} />
+            <EditorToolbarStrip onAutoLayout={handleAutoLayout} />
+            <main className="relative flex min-h-0 flex-1 gap-[18px] overflow-hidden bg-[#FBFCFE] px-3 pb-[10px] pt-4">
+              <MermaidPanel
+                isCollapsed={isMermaidCollapsed}
+                onToggle={() => setIsMermaidCollapsed((value) => !value)}
+                draft={currentDraft}
+                onDraftChange={setActiveDraftSource}
+                onImportDraft={() => importMermaid(currentDraft.source)}
+                onClearDraft={handleClear}
+                importError={importError}
+              />
+              <section className="mt-[18px] min-w-0 flex-1 overflow-hidden">
+                <SwimlaneCanvas />
+              </section>
+              <InspectorPanel isCollapsed={isInspectorCollapsed} onToggle={() => setIsInspectorCollapsed((value) => !value)} />
+              {openPopover === 'settings' && (
+                <Popover className="left-[204px] top-6 w-48">
+                  <button type="button" onClick={toggleGrid} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+                    <Settings size={15} />
+                    Toggle grid
+                  </button>
+                  <button type="button" onClick={() => jsonInputRef.current?.click()} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+                    <FileCode2 size={15} />
+                    Import JSON
+                  </button>
+                  <button type="button" onClick={handleAutoLayout} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+                    <LayoutDashboard size={15} />
+                    Auto layout
+                  </button>
+                </Popover>
+              )}
+            </main>
+            <BottomTabs draftItems={draftItems} activeDraftId={activeDraftId} onSelectDraft={selectDraft} onAddDraft={addDraft} onCloseDraft={closeDraft} />
+          </>
+        ) : (
+          <SidebarFeaturePages
+            activeSection={activeWorkspaceSection}
             draft={currentDraft}
+            importError={importError}
             onDraftChange={setActiveDraftSource}
             onImportDraft={() => importMermaid(currentDraft.source)}
-            onResetDraft={handleReset}
-            onClearDraft={handleClear}
-            importError={importError}
+            onNewDiagram={addDraft}
+            onGoToSection={setActiveWorkspaceSection}
+            onExportJson={handleExport}
+            onExportMermaid={handleExportMermaid}
           />
-          <section className="mt-[18px] min-w-0 flex-1 overflow-hidden">
-            <SwimlaneCanvas />
-          </section>
-          <InspectorPanel isCollapsed={isInspectorCollapsed} onToggle={() => setIsInspectorCollapsed((value) => !value)} />
-          {openPopover === 'settings' && (
-            <Popover className="left-[204px] top-6 w-48">
-              <button type="button" onClick={toggleGrid} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
-                <Settings size={15} />
-                Toggle grid
-              </button>
-              <button type="button" onClick={() => jsonInputRef.current?.click()} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
-                <FileCode2 size={15} />
-                Import JSON
-              </button>
-              <button type="button" onClick={handleAutoLayout} className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-950">
-                <LayoutDashboard size={15} />
-                Auto layout
-              </button>
-            </Popover>
-          )}
-        </main>
-        <BottomTabs draftItems={draftItems} activeDraftId={activeDraftId} onSelectDraft={setActiveDraftId} onAddDraft={addDraft} />
+        )}
       </div>
       {shareMessage && <div className="absolute bottom-16 right-5 rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white shadow-lg">{shareMessage}</div>}
       {layoutMessage && <div className="absolute bottom-16 left-1/2 -translate-x-1/2 rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white shadow-lg"><Sparkles size={13} className="mr-1 inline" />{layoutMessage}</div>}

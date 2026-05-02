@@ -1,4 +1,9 @@
 import { useState } from 'react'
+import CodeMirror from '@uiw/react-codemirror'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { EditorView } from '@codemirror/view'
+import { tags as t } from '@lezer/highlight'
+import { flowchartTags, foldByIndent, mermaid } from 'codemirror-lang-mermaid'
 import { ChevronLeft, ChevronRight, FileCode2, Upload } from 'lucide-react'
 import { defaultMermaid } from '../../lib/mermaid/defaultMermaid'
 
@@ -14,41 +19,132 @@ type MermaidPanelProps = {
   draft: MermaidDraft
   onDraftChange: (source: string) => void
   onImportDraft: () => void
-  onResetDraft: () => void
   onClearDraft: () => void
   importError: string | null
 }
 
-const highlightLine = (line: string) => {
-  const tokens = line.split(/(flowchart|subgraph|end|-->|--|[\[\]{}()])/g).filter(Boolean)
-  return tokens.map((token, index) => {
-    let color = '#4637A8'
-    let weight = 600
+const mermaidEditorTheme = EditorView.theme({
+  '&': {
+    height: '100%',
+    backgroundColor: '#FAFAFC',
+    color: '#0F172A',
+    fontSize: '11px',
+  },
+  '&.cm-focused': {
+    outline: 'none',
+  },
+  '.cm-scroller': {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+    height: '100%',
+    lineHeight: '18px',
+    overflow: 'auto',
+  },
+  '.cm-content': {
+    minHeight: '100%',
+    padding: '8px 10px',
+  },
+  '.cm-line': {
+    padding: '0 2px',
+  },
+  '.cm-gutters': {
+    backgroundColor: '#F8FAFC',
+    borderRight: '1px solid #E7EAF0',
+    color: '#64748B',
+    fontSize: '10px',
+  },
+  '.cm-activeLine': {
+    backgroundColor: '#F8F5FF',
+  },
+  '.cm-activeLineGutter': {
+    backgroundColor: '#EEE9FF',
+    color: '#6336F1',
+  },
+  '.cm-cursor': {
+    borderLeftColor: '#6336F1',
+  },
+  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+    backgroundColor: '#BFDBFE !important',
+  },
+  '.cm-matchingBracket, .cm-nonmatchingBracket': {
+    backgroundColor: '#EDE9FE',
+    outline: '1px solid #C7B9FF',
+  },
+}, { dark: false })
 
-    if (token === 'flowchart' || token === 'subgraph' || token === 'end') {
-      color = '#0F172A'
-      weight = 700
-    } else if (token === 'LR' || /^[A-Z]\d?$/.test(token.trim())) {
-      color = '#1D4ED8'
-      weight = 700
-    } else if (token === '-->' || token === '--') {
-      color = '#64748B'
-      weight = 700
-    } else if (/Workflow|Initiation|Preparation|Execution|Processing|Exception|Finalization|Begin|Operational|Satisfied|Retry|Terminate/.test(token)) {
-      color = '#9D174D'
-      weight = 600
-    } else if (/Process|Validate|Finalize|Complete|Output|Input|Assigned|Task|Operation|Handling/.test(token)) {
-      color = '#4F46E5'
-      weight = 600
+const mermaidHighlightStyle = HighlightStyle.define([
+  { tag: flowchartTags.diagramName, color: '#0F172A', fontWeight: '700' },
+  { tag: flowchartTags.keyword, color: '#9D174D', fontWeight: '700' },
+  { tag: flowchartTags.orientation, color: '#1D4ED8', fontWeight: '700' },
+  { tag: flowchartTags.nodeId, color: '#1D4ED8', fontWeight: '700' },
+  { tag: flowchartTags.nodeText, color: '#4F46E5', fontWeight: '600' },
+  { tag: flowchartTags.link, color: '#64748B', fontWeight: '700' },
+  { tag: flowchartTags.nodeEdge, color: '#64748B', fontWeight: '700' },
+  { tag: flowchartTags.nodeEdgeText, color: '#9D174D', fontWeight: '600' },
+  { tag: flowchartTags.string, color: '#4F46E5' },
+  { tag: flowchartTags.number, color: '#0F766E' },
+  { tag: flowchartTags.lineComment, color: '#8A94A6', fontStyle: 'italic' },
+  { tag: t.keyword, color: '#9D174D', fontWeight: '700' },
+  { tag: t.variableName, color: '#1D4ED8', fontWeight: '600' },
+  { tag: t.string, color: '#4F46E5' },
+  { tag: t.comment, color: '#8A94A6', fontStyle: 'italic' },
+])
+
+const startsPastRenderedText = (event: MouseEvent) => {
+  const target = event.target
+
+  if (!(target instanceof Element)) {
+    return false
+  }
+
+  const line = target.closest('.cm-line')
+
+  if (!line) {
+    return target.closest('.cm-content') !== null
+  }
+
+  const range = document.createRange()
+  range.selectNodeContents(line)
+  const textRects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0)
+  range.detach()
+
+  if (textRects.length === 0) {
+    return true
+  }
+
+  const rowRects = textRects.filter((rect) => event.clientY >= rect.top && event.clientY <= rect.bottom)
+  const activeRects = rowRects.length > 0 ? rowRects : textRects
+  const furthestTextEdge = Math.max(...activeRects.map((rect) => rect.right))
+
+  return event.clientX > furthestTextEdge + 4
+}
+
+const ignoreEmptySpaceDragSelection = EditorView.domEventHandlers({
+  mousedown(event, view) {
+    if (event.button !== 0 || !startsPastRenderedText(event)) {
+      return false
     }
 
-    return (
-      <span key={`${token}-${index}`} style={{ color, fontWeight: weight }}>
-        {token}
-      </span>
-    )
-  })
-}
+    const cursorPosition = view.posAtCoords({ x: event.clientX, y: event.clientY })
+
+    event.preventDefault()
+    view.focus()
+
+    if (cursorPosition !== null) {
+      view.dispatch({ selection: { anchor: cursorPosition } })
+    }
+
+    return true
+  },
+})
+
+const mermaidEditorExtensions = [
+  mermaid(),
+  foldByIndent(),
+  EditorView.lineWrapping,
+  ignoreEmptySpaceDragSelection,
+  mermaidEditorTheme,
+  syntaxHighlighting(mermaidHighlightStyle),
+]
 
 export function MermaidPanel({
   isCollapsed,
@@ -60,9 +156,6 @@ export function MermaidPanel({
   importError,
 }: MermaidPanelProps) {
   const [activeTab, setActiveTab] = useState<'mermaid' | 'examples'>('mermaid')
-  const [scrollTop, setScrollTop] = useState(0)
-  const lines = Math.max(27, draft.source.split('\n').length)
-  const sourceLines = draft.source.split('\n')
 
   if (isCollapsed) {
     return (
@@ -121,30 +214,19 @@ export function MermaidPanel({
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-2">
         <p className="mb-2 text-[11px] font-medium text-[#64748B]">Paste Mermaid code below</p>
         {activeTab === 'mermaid' ? (
-          <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border border-[#E7EAF0] bg-[#FAFAFC]">
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              <div className="flex" style={{ transform: `translateY(-${scrollTop}px)` }}>
-                <div className="select-none bg-[#F8FAFC] px-2 py-2 text-right font-mono text-[9px] leading-[17px] text-[#64748B]">
-                  {Array.from({ length: lines }, (_, index) => (
-                    <div key={index}>{index + 1}</div>
-                  ))}
-                </div>
-                <pre className="m-0 flex-1 whitespace-pre-wrap break-words px-2 py-2 pr-4 font-mono text-[9px] leading-[17px]">
-                  {sourceLines.map((line, index) => (
-                    <span key={`${index}-${line}`}>
-                      {line ? highlightLine(line) : ' '}
-                      {'\n'}
-                    </span>
-                  ))}
-                </pre>
-              </div>
-            </div>
-            <textarea
+          <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-[#E7EAF0] bg-[#FAFAFC] focus-within:border-[#C7B9FF]">
+            <CodeMirror
               value={draft.source}
-              onChange={(event) => onDraftChange(event.target.value)}
-              onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
-              spellCheck={false}
-              className="soft-scrollbar absolute inset-0 resize-none border-0 bg-transparent pl-9 pr-2 pt-2 font-mono text-[9px] leading-[17px] text-transparent caret-[#6336F1] outline-none"
+              className="h-full min-h-0"
+              height="100%"
+              style={{ height: '100%' }}
+              basicSetup={{
+                foldGutter: false,
+                highlightActiveLine: true,
+                highlightActiveLineGutter: true,
+              }}
+              extensions={mermaidEditorExtensions}
+              onChange={onDraftChange}
               aria-label="Mermaid source"
             />
           </div>

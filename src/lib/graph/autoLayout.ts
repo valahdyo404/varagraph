@@ -7,12 +7,12 @@ export const laneStartX = 0
 export const nodeWidth = 152
 export const nodeOffsetX = 34
 export const nodeStartY = 136
-export const nodeGapY = 150
+export const nodeGapY = 180
 const nodeTextLineHeight = 16
 const nodeVerticalPadding = 26
 const nodeMinHeight = 62
 const decisionNodeHeight = 124
-const nodeTextLineCapacity = 13
+const nodeTextLineCapacity = 15
 
 const fallbackLane: Swimlane = {
   id: "lane-1",
@@ -66,24 +66,159 @@ export const estimateNodeHeight = (node: DiagramNode): number => {
   return Math.max(nodeMinHeight, estimateTextLineCount(node.data.label) * nodeTextLineHeight + nodeVerticalPadding)
 }
 
+const hasPath = (fromId: string, toId: string, edges: GraphModel["edges"], ignoredEdgeId: string): boolean => {
+  const queue = [fromId]
+  const visited = new Set<string>()
+
+  while (queue.length > 0) {
+    const id = queue.shift()
+    if (!id || visited.has(id)) continue
+    if (id === toId) return true
+    visited.add(id)
+    edges.forEach((edge) => {
+      if (edge.id !== ignoredEdgeId && edge.source === id) queue.push(edge.target)
+    })
+  }
+
+  return false
+}
+
+const getAutoLayoutRows = (graph: GraphModel, lanes: Swimlane[]): Map<string, number> => {
+  const rowById = new Map(graph.nodes.map((node) => [node.id, 0]))
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]))
+  const laneIndexById = new Map(lanes.map((lane, index) => [lane.id, index]))
+  const nodeOrderById = new Map(graph.nodes.map((node, index) => [node.id, index]))
+  const connectedNodeIds = new Set<string>()
+
+  const applyEdgeConstraints = (): boolean => {
+    let changed = false
+
+    graph.edges.forEach((edge) => {
+      const source = nodeById.get(edge.source)
+      const target = nodeById.get(edge.target)
+      const sourceRow = rowById.get(edge.source)
+      const targetRow = rowById.get(edge.target)
+      if (!source || !target || sourceRow === undefined || targetRow === undefined) return
+
+      connectedNodeIds.add(edge.source)
+      connectedNodeIds.add(edge.target)
+      if (hasPath(edge.target, edge.source, graph.edges, edge.id)) return
+
+      const sourceLaneIndex = laneIndexById.get(source.data.laneId) ?? 0
+      const targetLaneIndex = laneIndexById.get(target.data.laneId) ?? sourceLaneIndex
+      const isSameLane = sourceLaneIndex === targetLaneIndex
+      const sourceOrder = nodeOrderById.get(edge.source) ?? 0
+      const targetOrder = nodeOrderById.get(edge.target) ?? 0
+      if (isSameLane && source.data.variant === "decision" && targetOrder < sourceOrder) return
+
+      if (!isSameLane && source.data.variant === "decision") {
+        if (targetRow === sourceRow) return
+
+        rowById.set(edge.target, sourceRow)
+        changed = true
+        return
+      }
+
+      const nextRow = sourceRow + (isSameLane ? 1 : 0)
+      if (targetRow >= nextRow) return
+
+      rowById.set(edge.target, nextRow)
+      changed = true
+    })
+
+    return changed
+  }
+
+  const getDecisionCrossLaneRows = (): Map<string, number> => {
+    const rows = new Map<string, number>()
+
+    graph.edges.forEach((edge) => {
+      const source = nodeById.get(edge.source)
+      const target = nodeById.get(edge.target)
+      const sourceRow = rowById.get(edge.source)
+      if (!source || !target || sourceRow === undefined) return
+      if (hasPath(edge.target, edge.source, graph.edges, edge.id)) return
+
+      const sourceLaneIndex = laneIndexById.get(source.data.laneId) ?? 0
+      const targetLaneIndex = laneIndexById.get(target.data.laneId) ?? sourceLaneIndex
+      if (sourceLaneIndex === targetLaneIndex || source.data.variant !== "decision") return
+
+      rows.set(edge.target, sourceRow)
+    })
+
+    return rows
+  }
+
+  const applyLaneCollisions = (): boolean => {
+    let changed = false
+    const occupiedRowsByLaneId = new Map<string, Set<number>>()
+    const decisionCrossLaneRows = getDecisionCrossLaneRows()
+    const nodes = [...graph.nodes].sort((left, right) => {
+      const leftPinned = decisionCrossLaneRows.has(left.id)
+      const rightPinned = decisionCrossLaneRows.has(right.id)
+      if (leftPinned !== rightPinned) return leftPinned ? -1 : 1
+      if (leftPinned && rightPinned) return (decisionCrossLaneRows.get(left.id) ?? 0) - (decisionCrossLaneRows.get(right.id) ?? 0)
+      return (nodeOrderById.get(left.id) ?? 0) - (nodeOrderById.get(right.id) ?? 0)
+    })
+
+    nodes.forEach((node) => {
+      const laneId = getSafeLaneId(lanes, node.data.laneId)
+      let row = decisionCrossLaneRows.get(node.id) ?? rowById.get(node.id) ?? 0
+      let occupiedRows = occupiedRowsByLaneId.get(laneId)
+      if (!occupiedRows) {
+        occupiedRows = new Set()
+        occupiedRowsByLaneId.set(laneId, occupiedRows)
+      }
+
+      while (occupiedRows.has(row)) row += 1
+      occupiedRows.add(row)
+      if (row === rowById.get(node.id)) return
+
+      rowById.set(node.id, row)
+      changed = true
+    })
+
+    return changed
+  }
+
+  for (let index = 0; index < graph.nodes.length; index += 1) {
+    if (!applyEdgeConstraints()) break
+  }
+
+  let nextRow = Math.max(0, ...rowById.values()) + 1
+  graph.nodes.forEach((node) => {
+    if (connectedNodeIds.has(node.id)) return
+
+    rowById.set(node.id, nextRow)
+    nextRow += 1
+  })
+
+  const maxIterations = Math.max(1, graph.nodes.length * graph.nodes.length)
+  for (let index = 0; index < maxIterations; index += 1) {
+    const edgeChanged = applyEdgeConstraints()
+    const collisionChanged = applyLaneCollisions()
+    if (!edgeChanged && !collisionChanged) break
+  }
+
+  return rowById
+}
+
 export const autoLayoutGraph = (graph: GraphModel): GraphModel => {
   const safeGraph = ensureLaneInvariant(graph)
   const lanes = normalizeLanes(safeGraph.lanes)
-  const laneCounts = new Map<string, number>()
   const laneById = new Map(lanes.map((lane) => [lane.id, lane]))
-  const rowCenterOffset = (safeGraph.nodes[0] ? estimateNodeHeight(safeGraph.nodes[0]) : nodeMinHeight) / 2
+  const rowById = getAutoLayoutRows(safeGraph, lanes)
 
   const nodes: DiagramNode[] = safeGraph.nodes.map((node) => {
     const laneId = getSafeLaneId(lanes, node.data.laneId)
     const lane = laneById.get(laneId)
-    const count = laneCounts.get(laneId) ?? 0
-    laneCounts.set(laneId, count + 1)
+    const row = rowById.get(node.id) ?? 0
 
     return {
       ...node,
       position: {
         x: lane ? nodeXForLane(lane) : laneStartX,
-        y: nodeStartY + count * nodeGapY + rowCenterOffset - estimateNodeHeight(node) / 2,
+        y: nodeStartY + row * nodeGapY - estimateNodeHeight(node) / 2,
       },
       data: {
         ...node.data,

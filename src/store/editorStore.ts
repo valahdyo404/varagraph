@@ -204,6 +204,7 @@ type EditorStore = {
   importJson: (json: string) => boolean
   clearMermaid: () => void
   resetMermaid: () => void
+  replaceDraft: (graph: GraphModel, mermaidSource: string) => void
   clearSelection: () => void
   selectNode: (nodeId: string | null) => void
   selectEdge: (edgeId: string | null) => void
@@ -328,6 +329,24 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       laneDeleteTargetId: null,
       importError: result.ok ? null : result.error.message,
     }, defaultMermaid)
+  },
+  replaceDraft: (graph, mermaidSource) => {
+    const nextGraph = sanitizeGraph(safeCloneGraph(graph))
+    persistDraft(nextGraph, mermaidSource)
+    set({
+      graph: nextGraph,
+      mermaidSource,
+      selectedNodeId: null,
+      selectedEdgeId: null,
+      selectedLaneId: null,
+      laneDeleteMessage: null,
+      laneDeleteTargetId: null,
+      importError: null,
+      past: [],
+      future: [],
+      canUndo: false,
+      canRedo: false,
+    })
   },
   clearSelection: () => set({ selectedNodeId: null, selectedEdgeId: null, selectedLaneId: null, laneDeleteMessage: null, laneDeleteTargetId: null }),
   selectNode: (nodeId) => set({ selectedNodeId: nodeId, selectedEdgeId: null, selectedLaneId: null, laneDeleteMessage: null, laneDeleteTargetId: null }),

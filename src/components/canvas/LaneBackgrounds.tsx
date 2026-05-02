@@ -63,7 +63,7 @@ export function LaneBackgrounds({ lanes, height, selectedLaneId, nodeCountsByLan
             >
               {Icon && <Icon size={22} strokeWidth={1.8} className={laneIconColor(lane.icon, index)} />}
               <span>{lane.title}</span>
-              <span className="absolute bottom-2 right-2 rounded-full bg-white/70 px-1.5 text-[9px] font-semibold text-[#64748B]">{nodeCount}</span>
+              <span className="absolute bottom-2 right-2 rounded-full px-1.5 text-[9px] font-semibold text-[#64748B]" style={{ backgroundColor: 'rgba(255,255,255,0.7)' }}>{nodeCount}</span>
             </button>
             {laneDeleteMessage && laneDeleteTargetId === lane.id && (
               <div className="pointer-events-none absolute left-2 right-2 top-[84px] z-20 rounded-md border border-orange-200 bg-orange-50 px-2 py-1.5 text-[11px] font-semibold leading-4 text-orange-700 shadow-sm">
