@@ -49,6 +49,7 @@ const directionForPosition = (position?: Position): PathPoint => {
 
 const isHorizontalPosition = (position?: Position) => position === Position.Left || position === Position.Right
 const isVerticalPosition = (position?: Position) => position === Position.Top || position === Position.Bottom
+const alignmentTolerance = 28
 
 const pushPathPoint = (points: PathPoint[], point: PathPoint) => {
   const previous = points.at(-1)
@@ -138,6 +139,21 @@ const orthogonalPath = ({
     x: target.x + targetDirection.x * targetStub,
     y: target.y + targetDirection.y * targetStub,
   }
+
+  if (sourceHorizontal && targetHorizontal && Math.abs(source.y - target.y) <= alignmentTolerance) {
+    const straight = simplifyOrthogonalPoints([source, { x: target.x, y: source.y }])
+    const path = straight.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
+    const label = getPathMidpoint(straight)
+    return [path, label.x, label.y]
+  }
+
+  if (sourceVertical && targetVertical && Math.abs(source.x - target.x) <= alignmentTolerance) {
+    const straight = simplifyOrthogonalPoints([source, { x: source.x, y: target.y }])
+    const path = straight.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
+    const label = getPathMidpoint(straight)
+    return [path, label.x, label.y]
+  }
+
   const points: PathPoint[] = [source]
   pushPathPoint(points, sourceExit)
 
