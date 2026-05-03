@@ -319,6 +319,33 @@ type SwimlaneCanvasProps = {
 
 const defaultViewport: Viewport = { x: 0, y: 0, zoom: 0.75 }
 
+const getCanvasContentBounds = (graph: { lanes: { x: number; width: number }[]; nodes: DiagramNode[] }, canvasHeight: number) => {
+  const laneMinX = graph.lanes.length > 0 ? Math.min(...graph.lanes.map((lane) => lane.x)) : 0
+  const laneMaxX = graph.lanes.length > 0 ? Math.max(...graph.lanes.map((lane) => lane.x + lane.width)) : 0
+  const nodeMinX = graph.nodes.length > 0 ? Math.min(...graph.nodes.map((node) => node.position.x)) : laneMinX
+  const nodeMaxX = graph.nodes.length > 0 ? Math.max(...graph.nodes.map((node) => node.position.x + nodeWidth)) : laneMaxX
+  const minX = Math.min(laneMinX, nodeMinX)
+  const maxX = Math.max(laneMaxX, nodeMaxX)
+
+  return {
+    minX,
+    maxX,
+    minY: 0,
+    maxY: canvasHeight,
+  }
+}
+
+const getCenteredDefaultViewport = (graph: { lanes: { x: number; width: number }[]; nodes: DiagramNode[] }, canvasHeight: number, frameWidth: number, frameHeight: number): Viewport => {
+  const bounds = getCanvasContentBounds(graph, canvasHeight)
+  const width = Math.max(1, bounds.maxX - bounds.minX)
+  const height = Math.max(1, bounds.maxY - bounds.minY)
+  const zoom = defaultViewport.zoom
+  const x = (frameWidth - width * zoom) / 2 - bounds.minX * zoom
+  const y = height * zoom < frameHeight ? (frameHeight - height * zoom) / 2 - bounds.minY * zoom : -bounds.minY * zoom
+
+  return { x, y, zoom }
+}
+
 export function SwimlaneCanvas({ readOnly = false, viewportOverride, canvasHeightOverride }: SwimlaneCanvasProps = {}) {
   const graph = useEditorStore((state) => state.graph)
   const selectedNodeId = useEditorStore((state) => state.selectedNodeId)
@@ -329,7 +356,9 @@ export function SwimlaneCanvas({ readOnly = false, viewportOverride, canvasHeigh
   const showGrid = useEditorStore((state) => state.showGrid)
   const activeTool = useEditorStore((state) => state.activeTool)
   const pendingEdgeArrowDirection = useEditorStore((state) => state.pendingEdgeArrowDirection)
+  const canvasRef = useRef<HTMLDivElement | null>(null)
   const flowRef = useRef<ReactFlowInstance<Node<DiagramNodeData>, Edge> | null>(null)
+  const hasCenteredDefaultViewportRef = useRef(false)
   const [viewport, setViewport] = useState<Viewport>(viewportOverride ?? defaultViewport)
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [connectorSourceNodeId, setConnectorSourceNodeId] = useState<string | null>(null)
@@ -421,10 +450,35 @@ export function SwimlaneCanvas({ readOnly = false, viewportOverride, canvasHeigh
   }, [graph.nodes])
 
   const canvasHeight = useMemo(() => canvasHeightOverride ?? Math.max(1048, ...graph.nodes.map((node) => node.position.y + 180)), [canvasHeightOverride, graph.nodes])
+  const hasCanvasContent = graph.nodes.length > 0 || graph.lanes.length > 0
 
   useEffect(() => {
     if (viewportOverride) setViewport(viewportOverride)
   }, [viewportOverride])
+
+  useEffect(() => {
+    if (readOnly || viewportOverride) return
+    if (!hasCanvasContent) {
+      hasCenteredDefaultViewportRef.current = false
+      setViewport(defaultViewport)
+      return
+    }
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const centerDefaultViewport = () => {
+      if (hasCenteredDefaultViewportRef.current || canvas.clientWidth === 0 || canvas.clientHeight === 0) return
+      const nextViewport = getCenteredDefaultViewport(graph, canvasHeight, canvas.clientWidth, canvas.clientHeight)
+      hasCenteredDefaultViewportRef.current = true
+      setViewport(nextViewport)
+    }
+
+    centerDefaultViewport()
+    const resizeObserver = new ResizeObserver(centerDefaultViewport)
+    resizeObserver.observe(canvas)
+    return () => resizeObserver.disconnect()
+  }, [canvasHeight, graph, hasCanvasContent, readOnly, viewportOverride])
 
   const handleNodeClick = useCallback<NodeMouseHandler>((_, node) => {
     if (isConnectorMode) {
@@ -587,6 +641,7 @@ export function SwimlaneCanvas({ readOnly = false, viewportOverride, canvasHeigh
 
   return (
     <div
+      ref={canvasRef}
       data-varagraph-export-canvas="true"
       className={`relative h-full overflow-hidden rounded-md border border-[#E5E7EB] bg-white ${isConnectorMode && !readOnly ? 'connector-active' : ''} ${!readOnly && isAutoPanActive ? 'cursor-grab active:cursor-grabbing' : !readOnly && isShapeMode ? 'cursor-crosshair' : ''}`}
       onPointerDown={handlePanPointerDown}
