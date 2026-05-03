@@ -48,3 +48,8 @@ tmp
 *.md
 !README.md
 !**/README.md
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
