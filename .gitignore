@@ -4,3 +4,11 @@ dist
 .DS_Store
 .omc
 .omx
+
+# Keep design/reference artifacts local only.
+/*.png
+
+# Keep markdown guides/design notes local only; README files may be tracked.
+*.md
+!README.md
+!**/README.md
