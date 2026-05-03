@@ -6,7 +6,6 @@ import {
   Controls,
   MarkerType,
   PanOnScrollMode,
-  Position,
   ReactFlow,
   ViewportPortal,
   type Connection,
@@ -20,7 +19,7 @@ import {
   type ReactFlowInstance,
   type Viewport,
 } from '@xyflow/react'
-import type { DiagramEdgeArrow, DiagramNodeData, DiagramNodeVariant } from '../../types/graph'
+import type { DiagramEdgeArrow, DiagramNode, DiagramNodeData, DiagramNodeVariant } from '../../types/graph'
 import { useEditorStore } from '../../store/editorStore'
 import { LaneBackgrounds } from './LaneBackgrounds'
 import { estimateNodeHeight, nodeWidth } from '../../lib/graph/autoLayout'
@@ -33,23 +32,29 @@ type PathPoint = {
   y: number
 }
 
-const directionForPosition = (position?: Position): PathPoint => {
-  switch (position) {
-    case Position.Left:
-      return { x: -1, y: 0 }
-    case Position.Right:
-      return { x: 1, y: 0 }
-    case Position.Top:
-      return { x: 0, y: -1 }
-    case Position.Bottom:
-    default:
-      return { x: 0, y: 1 }
-  }
+type SmartRoute = {
+  points: PathPoint[]
 }
 
-const isHorizontalPosition = (position?: Position) => position === Position.Left || position === Position.Right
-const isVerticalPosition = (position?: Position) => position === Position.Top || position === Position.Bottom
-const alignmentTolerance = 28
+type SmartEdgeData = {
+  route?: SmartRoute
+}
+
+type ShapeBounds = {
+  center: PathPoint
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
+
+type AnchorDirection = 'left' | 'right' | 'top' | 'bottom'
+
+const decisionSize = 108
+const decisionOffsetX = (nodeWidth - decisionSize) / 2
+const decisionOffsetY = 8
+const decisionVisualRadius = (Math.sqrt(2) * decisionSize) / 2
+const cornerRadius = 10
 
 const pushPathPoint = (points: PathPoint[], point: PathPoint) => {
   const previous = points.at(-1)
@@ -113,73 +118,129 @@ const getPathMidpoint = (points: PathPoint[]): PathPoint => {
   return points.at(-1) ?? fallback
 }
 
-const orthogonalPath = ({
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-}: Pick<EdgeProps, 'sourceX' | 'sourceY' | 'targetX' | 'targetY' | 'sourcePosition' | 'targetPosition'>): [string, number, number] => {
-  const source = { x: sourceX, y: sourceY }
-  const target = { x: targetX, y: targetY }
-  const sourceDirection = directionForPosition(sourcePosition)
-  const targetDirection = directionForPosition(targetPosition)
-  const sourceHorizontal = isHorizontalPosition(sourcePosition)
-  const targetHorizontal = isHorizontalPosition(targetPosition)
-  const sourceVertical = isVerticalPosition(sourcePosition)
-  const targetVertical = isVerticalPosition(targetPosition)
-  const sourceStub = 20
-  const targetStub = 20
-  const sourceExit = {
-    x: source.x + sourceDirection.x * sourceStub,
-    y: source.y + sourceDirection.y * sourceStub,
-  }
-  const targetEntry = {
-    x: target.x + targetDirection.x * targetStub,
-    y: target.y + targetDirection.y * targetStub,
+const sign = (value: number) => (value === 0 ? 0 : value > 0 ? 1 : -1)
+
+const shapeBoundsForNode = (node: DiagramNode): ShapeBounds => {
+  if (node.data.variant === 'decision') {
+    const left = node.position.x + decisionOffsetX
+    const top = node.position.y + decisionOffsetY
+    const center = { x: left + decisionSize / 2, y: top + decisionSize / 2 }
+    return {
+      center,
+      left: center.x - decisionVisualRadius,
+      right: center.x + decisionVisualRadius,
+      top: center.y - decisionVisualRadius,
+      bottom: center.y + decisionVisualRadius,
+    }
   }
 
-  if (sourceHorizontal && targetHorizontal && Math.abs(source.y - target.y) <= alignmentTolerance) {
-    const straight = simplifyOrthogonalPoints([source, { x: target.x, y: source.y }])
-    const path = straight.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
-    const label = getPathMidpoint(straight)
-    return [path, label.x, label.y]
+  const height = estimateNodeHeight(node)
+  const center = { x: node.position.x + nodeWidth / 2, y: node.position.y + height / 2 }
+  return {
+    center,
+    left: node.position.x,
+    right: node.position.x + nodeWidth,
+    top: node.position.y,
+    bottom: node.position.y + height,
+  }
+}
+
+const anchorForDirection = (bounds: ShapeBounds, direction: AnchorDirection): PathPoint => {
+  switch (direction) {
+    case 'left':
+      return { x: bounds.left, y: bounds.center.y }
+    case 'right':
+      return { x: bounds.right, y: bounds.center.y }
+    case 'top':
+      return { x: bounds.center.x, y: bounds.top }
+    case 'bottom':
+    default:
+      return { x: bounds.center.x, y: bounds.bottom }
+  }
+}
+
+const buildSmartRoute = (
+  sourceNode: DiagramNode,
+  targetNode: DiagramNode,
+): SmartRoute => {
+  const sourceBounds = shapeBoundsForNode(sourceNode)
+  const targetBounds = shapeBoundsForNode(targetNode)
+  const dx = targetBounds.center.x - sourceBounds.center.x
+  const dy = targetBounds.center.y - sourceBounds.center.y
+  const routeVertically = Math.abs(dy) > Math.abs(dx)
+  const sourceDirection: AnchorDirection = routeVertically ? (dy >= 0 ? 'bottom' : 'top') : dx >= 0 ? 'right' : 'left'
+  const targetDirection: AnchorDirection = routeVertically ? (dy >= 0 ? 'top' : 'bottom') : dx >= 0 ? 'left' : 'right'
+  const isDecisionCrossLane =
+    sourceNode.data.variant === 'decision' &&
+    sourceNode.data.laneId !== targetNode.data.laneId &&
+    Math.abs(dx) >= Math.abs(dy) &&
+    Math.abs(dy) > 0.5
+
+  if (isDecisionCrossLane) {
+    const source = anchorForDirection(sourceBounds, dx >= 0 ? 'right' : 'left')
+    const target = anchorForDirection(targetBounds, dy >= 0 ? 'top' : 'bottom')
+    const points: PathPoint[] = [source]
+    pushPathPoint(points, { x: target.x, y: source.y })
+    pushPathPoint(points, target)
+    return { points: simplifyOrthogonalPoints(points) }
   }
 
-  if (sourceVertical && targetVertical && Math.abs(source.x - target.x) <= alignmentTolerance) {
-    const straight = simplifyOrthogonalPoints([source, { x: source.x, y: target.y }])
-    const path = straight.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
-    const label = getPathMidpoint(straight)
-    return [path, label.x, label.y]
-  }
-
+  const source = anchorForDirection(sourceBounds, sourceDirection)
+  const target = anchorForDirection(targetBounds, targetDirection)
   const points: PathPoint[] = [source]
-  pushPathPoint(points, sourceExit)
 
-  if (Math.abs(sourceExit.x - targetEntry.x) < 0.5 || Math.abs(sourceExit.y - targetEntry.y) < 0.5) {
-    pushPathPoint(points, targetEntry)
-  } else if (sourceHorizontal && targetHorizontal) {
-    const middleX = (sourceExit.x + targetEntry.x) / 2
-    pushPathPoint(points, { x: middleX, y: sourceExit.y })
-    pushPathPoint(points, { x: middleX, y: targetEntry.y })
-  } else if (sourceVertical && targetVertical) {
-    const middleY = (sourceExit.y + targetEntry.y) / 2
-    pushPathPoint(points, { x: sourceExit.x, y: middleY })
-    pushPathPoint(points, { x: targetEntry.x, y: middleY })
-  } else if (sourceHorizontal) {
-    pushPathPoint(points, { x: targetEntry.x, y: sourceExit.y })
+  if (routeVertically) {
+    if (Math.abs(source.x - target.x) < 0.5) {
+      pushPathPoint(points, target)
+    } else {
+      const middleY = (source.y + target.y) / 2
+      pushPathPoint(points, { x: source.x, y: middleY })
+      pushPathPoint(points, { x: target.x, y: middleY })
+      pushPathPoint(points, target)
+    }
+  } else if (Math.abs(source.y - target.y) < 0.5) {
+    pushPathPoint(points, target)
   } else {
-    pushPathPoint(points, { x: sourceExit.x, y: targetEntry.y })
+    const middleX = (source.x + target.x) / 2
+    pushPathPoint(points, { x: middleX, y: source.y })
+    pushPathPoint(points, { x: middleX, y: target.y })
+    pushPathPoint(points, target)
   }
 
-  pushPathPoint(points, targetEntry)
-  pushPathPoint(points, target)
+  return { points: simplifyOrthogonalPoints(points) }
+}
 
+const roundedOrthogonalPath = (points: PathPoint[]): string => {
   const simplified = simplifyOrthogonalPoints(points)
-  const path = simplified.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
-  const label = getPathMidpoint(simplified)
-  return [path, label.x, label.y]
+  if (simplified.length === 0) return ''
+  if (simplified.length === 1) return `M ${simplified[0].x} ${simplified[0].y}`
+  if (simplified.length === 2) return `M ${simplified[0].x} ${simplified[0].y} L ${simplified[1].x} ${simplified[1].y}`
+
+  let path = `M ${simplified[0].x} ${simplified[0].y}`
+
+  for (let index = 1; index < simplified.length - 1; index += 1) {
+    const previous = simplified[index - 1]
+    const current = simplified[index]
+    const next = simplified[index + 1]
+    const incomingLength = Math.abs(current.x - previous.x) + Math.abs(current.y - previous.y)
+    const outgoingLength = Math.abs(next.x - current.x) + Math.abs(next.y - current.y)
+    const radius = Math.min(cornerRadius, incomingLength / 2, outgoingLength / 2)
+
+    if (radius <= 0) {
+      path += ` L ${current.x} ${current.y}`
+      continue
+    }
+
+    const incomingDirection = { x: sign(current.x - previous.x), y: sign(current.y - previous.y) }
+    const outgoingDirection = { x: sign(next.x - current.x), y: sign(next.y - current.y) }
+    const cornerStart = { x: current.x - incomingDirection.x * radius, y: current.y - incomingDirection.y * radius }
+    const cornerEnd = { x: current.x + outgoingDirection.x * radius, y: current.y + outgoingDirection.y * radius }
+
+    path += ` L ${cornerStart.x} ${cornerStart.y} Q ${current.x} ${current.y} ${cornerEnd.x} ${cornerEnd.y}`
+  }
+
+  const last = simplified[simplified.length - 1]
+  return `${path} L ${last.x} ${last.y}`
 }
 
 function OrthogonalEdge({
@@ -187,8 +248,6 @@ function OrthogonalEdge({
   sourceY,
   targetX,
   targetY,
-  sourcePosition,
-  targetPosition,
   markerStart,
   markerEnd,
   label,
@@ -199,8 +258,13 @@ function OrthogonalEdge({
   labelBgBorderRadius,
   style,
   interactionWidth,
+  data,
 }: EdgeProps) {
-  const [path, labelX, labelY] = orthogonalPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
+  const route = (data as SmartEdgeData | undefined)?.route
+  const fallbackPoints = simplifyOrthogonalPoints([{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }])
+  const points = route?.points?.length ? route.points : fallbackPoints
+  const path = roundedOrthogonalPath(points)
+  const labelPoint = getPathMidpoint(points)
 
   return (
     <BaseEdge
@@ -208,14 +272,14 @@ function OrthogonalEdge({
       markerStart={markerStart}
       markerEnd={markerEnd}
       label={label}
-      labelX={labelX}
-      labelY={labelY}
+      labelX={labelPoint.x}
+      labelY={labelPoint.y}
       labelStyle={labelStyle}
       labelShowBg={labelShowBg}
       labelBgStyle={labelBgStyle}
       labelBgPadding={labelBgPadding}
       labelBgBorderRadius={labelBgBorderRadius}
-      style={style}
+      style={{ ...style, strokeLinecap: 'round', strokeLinejoin: 'round' }}
       interactionWidth={interactionWidth}
     />
   )
@@ -329,6 +393,7 @@ export function SwimlaneCanvas({ readOnly = false, viewportOverride, canvasHeigh
       const targetHandle = edge.targetHandle ?? computedTargetHandle
       const selected = edge.id === selectedEdgeId
       const arrowDirection = edge.data?.arrowDirection ?? 'forward'
+      const route = source && target ? buildSmartRoute(source, target) : undefined
 
       return {
         id: edge.id,
@@ -339,7 +404,7 @@ export function SwimlaneCanvas({ readOnly = false, viewportOverride, canvasHeigh
         type: 'orthogonal',
         animated: edge.animated,
         label: edge.label,
-        data: edge.data,
+        data: { ...edge.data, route },
         selected,
         ...markerForEdge(arrowDirection, selected),
         style: { stroke: selected ? '#6336F1' : '#64748B', strokeWidth: selected ? 3 : 1.9, strokeDasharray: arrowDirection === 'none' ? '5 4' : undefined },

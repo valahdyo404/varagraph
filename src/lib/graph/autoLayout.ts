@@ -112,9 +112,10 @@ const getAutoLayoutRows = (graph: GraphModel, lanes: Swimlane[]): Map<string, nu
       if (isSameLane && source.data.variant === "decision" && targetOrder < sourceOrder) return
 
       if (!isSameLane && source.data.variant === "decision") {
-        if (targetRow === sourceRow) return
+        const nextRow = sourceRow + 1
+        if (targetRow === nextRow) return
 
-        rowById.set(edge.target, sourceRow)
+        rowById.set(edge.target, nextRow)
         changed = true
         return
       }
@@ -143,7 +144,7 @@ const getAutoLayoutRows = (graph: GraphModel, lanes: Swimlane[]): Map<string, nu
       const targetLaneIndex = laneIndexById.get(target.data.laneId) ?? sourceLaneIndex
       if (sourceLaneIndex === targetLaneIndex || source.data.variant !== "decision") return
 
-      rows.set(edge.target, sourceRow)
+      rows.set(edge.target, sourceRow + 1)
     })
 
     return rows
