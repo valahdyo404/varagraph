@@ -1,4 +1,5 @@
-const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8082/api/v1'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8082'
+const BASE = `${apiBaseUrl.replace(/\/$/, '')}/api/v1`
 
 class ApiClient {
   private token: string | null = null
